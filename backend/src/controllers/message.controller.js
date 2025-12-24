@@ -25,7 +25,7 @@ export const getMessages = async (req, res) => {
         { senderId: myId, receiverId: userToChatId },
         { senderId: userToChatId, receiverId: myId },
       ],
-    });
+    }).sort({ createdAt: 1 }); // oldest → newest;
 
     res.status(200).json(messages);
   } catch (error) {
@@ -40,6 +40,10 @@ export const sendMessage = async (req, res) => {
     const { id: receiverId } = req.params;
     const senderId = req.user._id;
 
+    if (!text && !image) {
+      return res.status(400).json({ error: "Message cannot be empty" });
+    }
+    
     let imageUrl;
     if (image) {
       // Upload base64 image to cloudinary
