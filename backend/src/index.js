@@ -7,14 +7,12 @@ import messageRoutes from "./routes/message.route.js"
 import cors from "cors";
 import { app, server} from "./lib/socket.js"
 import path from "path";
-import { fileURLToPath } from "url";
 
 dotenv.config()
 
 
 const PORT = process.env.PORT
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = path.resolve();
 
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true, limit: "2mb" }));
