@@ -5,6 +5,8 @@ Users can authenticate, chat in real time, upload profile images, and personaliz
 
 This project demonstrates **full-stack development, authentication, WebSockets, and cloud integrations**.
 
+🔗 **Live Demo:** [https://devchat-8dde.onrender.com/](https://devchat-8dde.onrender.com/)
+
 ---
 
 ## ✨ Features
