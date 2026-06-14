@@ -3,7 +3,7 @@ import User from "../models/user.model.js";
 import bcrypt from "bcryptjs";
 import cloudinary from "../lib/cloudinary.js";
 
-export const signup = async (req, res) => {
+export const signup = async (req, res, next) => {
   const { fullName, email, password } = req.body;
   try {
     if (!fullName || !email || !password) {
@@ -42,13 +42,12 @@ export const signup = async (req, res) => {
       res.status(400).json({ message: "Invalid user data" });
     }
   } catch (error) {
-    console.log("Error in signup controller", error.message);
-    res.status(500).json({ message: "Internal Server Error" });
+    next(error);
   }
 };
 
 
-export const login = async (req, res) => {
+export const login = async (req, res, next) => {
   const { email, password } = req.body;
   try {
     const user = await User.findOne({ email });
@@ -71,22 +70,20 @@ export const login = async (req, res) => {
       profilePic: user.profilePic,
     });
   } catch (error) {
-    console.log("Error in login controller", error.message);
-    res.status(500).json({ message: "Internal Server Error" });
+    next(error);
   }
 };
 
-export const logout = (req, res) => {
+export const logout = (req, res, next) => {
   try {
     res.cookie("jwt", "", { maxAge: 0 });
     res.status(200).json({ message: "Logged out successfully" });
   } catch (error) {
-    console.log("Error in logout controller", error.message);
-    res.status(500).json({ message: "Internal Server Error" });
+    next(error);
   }
 };
 
-export const updateProfile = async (req, res) => {
+export const updateProfile = async (req, res, next) => {
   try {
     const { profilePic } = req.body;
     const userId = req.user._id;
@@ -105,17 +102,15 @@ export const updateProfile = async (req, res) => {
     res.status(200).json(updatedUser);
 
   } catch (error) {
-    console.log("error in update profile:", error);
-    res.status(500).json({ message: "Internal server error" });
+    next(error);
   }
 };
 
-export const checkAuth = (req, res) => {
+export const checkAuth = (req, res, next) => {
     try {
         res.status(200).json(req.user);
-    }catch (error) {
-        console.log("Error in checkAuth controller", error.message);
-        res.status(500).json({ message: "Internal Server Error"});
+    } catch (error) {
+        next(error);
     }
 }
 

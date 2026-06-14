@@ -2,51 +2,66 @@ import User from "../models/user.model.js";
 import Message from "../models/message.model.js";
 
 import cloudinary from "../lib/cloudinary.js";
+import { io, getReceiverSocketId } from "../lib/socket.js";
 
-export const getUsersForSidebar = async (req, res) => {
+export const getUsersForSidebar = async (req, res, next) => {
   try {
     const loggedInUserId = req.user._id;
-    const filteredUsers = await User.find({ _id: { $ne: loggedInUserId } }).select("-password");
+    const filteredUsers = await User.find({ _id: { $ne: loggedInUserId } })
+      .select("-password")
+      .limit(100)
+      .lean();
 
     res.status(200).json(filteredUsers);
   } catch (error) {
-    console.error("Error in getUsersForSidebar: ", error.message);
-    res.status(500).json({ error: "Internal server error" });
+    next(error);
   }
 };
 
-export const getMessages = async (req, res) => {
+export const getMessages = async (req, res, next) => {
   try {
     const { id: userToChatId } = req.params;
     const myId = req.user._id;
 
-    const messages = await Message.find({
+    // pass ?cursor=<createdAt> to page back through older messages
+    const limit = Math.min(Number(req.query.limit) || 30, 100);
+    const query = {
       $or: [
         { senderId: myId, receiverId: userToChatId },
         { senderId: userToChatId, receiverId: myId },
       ],
-    }).sort({ createdAt: 1 }); // oldest → newest;
+    };
+    if (req.query.cursor) {
+      query.createdAt = { $lt: new Date(req.query.cursor) };
+    }
 
-    res.status(200).json(messages);
+    // query newest-first for the cursor, hand back oldest→newest for the UI
+    const page = await Message.find(query)
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    const messages = page.reverse();
+    const nextCursor = page.length === limit ? messages[0].createdAt : null;
+
+    res.status(200).json({ messages, nextCursor });
   } catch (error) {
-    console.log("Error in getMessages controller: ", error.message);
-    res.status(500).json({ error: "Internal server error" });
+    next(error);
   }
 };
 
-export const sendMessage = async (req, res) => {
+export const sendMessage = async (req, res, next) => {
   try {
     const { text, image } = req.body;
     const { id: receiverId } = req.params;
     const senderId = req.user._id;
 
     if (!text && !image) {
-      return res.status(400).json({ error: "Message cannot be empty" });
+      return res.status(400).json({ message: "Message cannot be empty" });
     }
-    
+
     let imageUrl;
     if (image) {
-      // Upload base64 image to cloudinary
       const uploadResponse = await cloudinary.uploader.upload(image);
       imageUrl = uploadResponse.secure_url;
     }
@@ -60,9 +75,13 @@ export const sendMessage = async (req, res) => {
 
     await newMessage.save();
 
+    const receiverSocketId = getReceiverSocketId(receiverId);
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit("newMessage", newMessage);
+    }
+
     res.status(201).json(newMessage);
   } catch (error) {
-    console.log("Error in sendMessage controller: ", error.message);
-    res.status(500).json({ error: "Internal server error" });
+    next(error);
   }
 };

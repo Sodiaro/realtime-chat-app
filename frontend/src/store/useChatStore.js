@@ -26,7 +26,8 @@ export const useChatStore = create((set, get) => ({
     set({ isMessagesLoading: true });
     try {
       const res = await axiosInstance.get(`/messages/${userId}`);
-      set({ messages: res.data });
+      // Backend now returns { messages, nextCursor } (cursor pagination).
+      set({ messages: res.data.messages ?? res.data });
     } catch (error) {
       toast.error(error.response.data.message);
     } finally {
