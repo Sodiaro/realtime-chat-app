@@ -53,7 +53,7 @@ app.use("/api/messages", messageRoutes);
 if (env.NODE_ENV === "production") {
   app.use(express.static(path.join(__dirname, "../frontend/dist")));
 
-  app.get(/.*/, (req, res) => {
+  app.get(/.*/, (_req, res) => {
     res.sendFile(path.join(__dirname, "../frontend", "dist", "index.html"));
   });
 }
@@ -67,7 +67,7 @@ server.listen(PORT, () => {
   console.log("server is running on PORT:" + PORT);
 });
 
-const shutdown = async (signal) => {
+const shutdown = async (signal: string) => {
   console.log(`\n${signal} received, shutting down gracefully...`);
   io.close();
   server.close(async () => {

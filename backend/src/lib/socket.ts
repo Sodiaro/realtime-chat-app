@@ -4,23 +4,32 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import { parse as parseCookie } from "cookie";
 import { corsOrigins } from "./env.js";
+import type { IMessage } from "../models/message.model.js";
+
+interface ServerToClientEvents {
+  newMessage: (message: IMessage) => void;
+  getOnlineUsers: (userIds: string[]) => void;
+}
+
+// no client→server events yet (Phase C)
+interface ClientToServerEvents {}
 
 const app = express();
 const server = http.createServer(app);
 
-const io = new Server(server, {
+const io = new Server<ClientToServerEvents, ServerToClientEvents>(server, {
   cors: {
     origin: corsOrigins,
     credentials: true,
   },
 });
 
-export function getReceiverSocketId(userId) {
+export function getReceiverSocketId(userId: string): string | undefined {
   return userSocketMap[userId];
 }
 
 // used to store online users  {userId: socketId}
-const userSocketMap = {};
+const userSocketMap: Record<string, string> = {};
 
 // take userId from the verified JWT, not the handshake query — clients can fake that
 io.use((socket, next) => {
@@ -29,7 +38,9 @@ io.use((socket, next) => {
     const token = cookies.jwt;
     if (!token) return next(new Error("Unauthorized - No Token Provided"));
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as {
+      userId: string;
+    };
     socket.userId = decoded.userId;
     next();
   } catch {
@@ -38,7 +49,7 @@ io.use((socket, next) => {
 });
 
 io.on("connection", (socket) => {
-  const userId = socket.userId;
+  const userId = socket.userId!;
   userSocketMap[userId] = socket.id;
 
   socket.join(`user:${userId}`);

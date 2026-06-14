@@ -12,7 +12,6 @@ const envSchema = z.object({
   CLOUDINARY_API_KEY: z.string().min(1),
   CLOUDINARY_API_SECRET: z.string().min(1),
   CORS_ORIGIN: z.string().default("http://localhost:5173"), // comma-separated
-
 });
 
 const rawEnv = {
