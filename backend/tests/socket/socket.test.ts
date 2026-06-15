@@ -63,4 +63,67 @@ describe("socket", () => {
     expect(msg.text).toBe("live!");
     expect(String(msg.senderId)).toBe(a.id);
   });
+
+  it("relays typing state from one user to the other", async () => {
+    const a = await makeUser("typeA");
+    const b = await makeUser("typeB");
+
+    const sockA: Socket = connect(a.cookie);
+    const sockB: Socket = connect(b.cookie);
+    await Promise.all([
+      new Promise<void>((r) => sockA.on("connect", () => r())),
+      new Promise<void>((r) => sockB.on("connect", () => r())),
+    ]);
+
+    const gotTyping = new Promise<{ from: string; isTyping: boolean }>((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error("no typing event in 5s")), 5000);
+      sockB.on("typing", (p) => {
+        clearTimeout(t);
+        resolve(p);
+      });
+    });
+
+    sockA.emit("typing", { to: b.id, isTyping: true });
+
+    const payload = await gotTyping;
+    sockA.close();
+    sockB.close();
+    expect(payload.from).toBe(a.id);
+    expect(payload.isTyping).toBe(true);
+  });
+
+  it("sends a read receipt to the sender when the receiver marks read", async () => {
+    const a = await makeUser("readA");
+    const b = await makeUser("readB");
+
+    const sockA: Socket = connect(a.cookie);
+    const sockB: Socket = connect(b.cookie);
+    await Promise.all([
+      new Promise<void>((r) => sockA.on("connect", () => r())),
+      new Promise<void>((r) => sockB.on("connect", () => r())),
+    ]);
+
+    // A sends a message to B
+    await a.agent.post(`/api/messages/send/${b.id}`).send({ text: "did you read this?" });
+
+    const gotRead = new Promise<{ by: string }>((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error("no messagesRead in 5s")), 5000);
+      sockA.on("messagesRead", (p) => {
+        clearTimeout(t);
+        resolve(p);
+      });
+    });
+
+    // B marks the conversation read
+    sockB.emit("markRead", { to: a.id });
+
+    const payload = await gotRead;
+    sockA.close();
+    sockB.close();
+    expect(payload.by).toBe(b.id);
+
+    // and it persisted: A's message now has a readAt
+    const page = (await a.agent.get(`/api/messages/${b.id}`)).body;
+    expect(page.messages.at(-1).readAt).toBeTruthy();
+  });
 });

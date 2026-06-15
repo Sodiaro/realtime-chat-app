@@ -9,6 +9,7 @@ export const useChatStore = create((set, get) => ({
   selectedUser: null,
   isUsersLoading: false,
   isMessagesLoading: false,
+  isTyping: false,
 
   getUsers: async () => {
     set({ isUsersLoading: true });
@@ -56,6 +57,26 @@ export const useChatStore = create((set, get) => ({
 
       set({
         messages: [...get().messages, newMessage],
+        isTyping: false, // a message arrived, so they've stopped typing
+      });
+      get().markMessagesRead(); // we're viewing this chat, so it's read
+    });
+
+    socket.on("typing", ({ from, isTyping }) => {
+      if (from !== get().selectedUser?._id) return;
+      set({ isTyping });
+    });
+
+    // the other person read our messages → flip our ticks to "seen"
+    socket.on("messagesRead", ({ by }) => {
+      if (by !== get().selectedUser?._id) return;
+      const authUserId = useAuthStore.getState().authUser?._id;
+      set({
+        messages: get().messages.map((m) =>
+          m.senderId === authUserId && !m.readAt
+            ? { ...m, readAt: new Date().toISOString() }
+            : m
+        ),
       });
     });
   },
@@ -63,7 +84,25 @@ export const useChatStore = create((set, get) => ({
   unsubscribeFromMessages: () => {
     const socket = useAuthStore.getState().socket;
     socket.off("newMessage");
+    socket.off("typing");
+    socket.off("messagesRead");
   },
 
-  setSelectedUser: (selectedUser) => set({ selectedUser }),
+  // tell the selected user whether we're currently typing
+  emitTyping: (isTyping) => {
+    const { selectedUser } = get();
+    const socket = useAuthStore.getState().socket;
+    if (!selectedUser || !socket) return;
+    socket.emit("typing", { to: selectedUser._id, isTyping });
+  },
+
+  // signal that we've seen the selected user's messages
+  markMessagesRead: () => {
+    const { selectedUser } = get();
+    const socket = useAuthStore.getState().socket;
+    if (!selectedUser || !socket) return;
+    socket.emit("markRead", { to: selectedUser._id });
+  },
+
+  setSelectedUser: (selectedUser) => set({ selectedUser, isTyping: false }),
 }));

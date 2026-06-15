@@ -38,6 +38,7 @@ export const openapiSpec = {
           receiverId: { type: "string" },
           text: { type: "string", example: "hey there" },
           image: { type: "string", example: "https://res.cloudinary.com/.../img.jpg" },
+          readAt: { type: "string", format: "date-time", nullable: true },
           createdAt: { type: "string", format: "date-time" },
           updatedAt: { type: "string", format: "date-time" },
         },

@@ -7,6 +7,7 @@ export interface IMessage {
   receiverId: Types.ObjectId;
   text?: string;
   image?: string;
+  readAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -34,6 +35,9 @@ const messageSchema = new Schema<IMessage>(
     },
     image: {
       type: String,
+    },
+    readAt: {
+      type: Date,
     },
   },
   { timestamps: true }

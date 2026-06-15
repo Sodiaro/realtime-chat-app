@@ -8,14 +8,20 @@ import { corsOrigins } from "./env.js";
 import { createAdapterClients, redisEnabled } from "./redis.js";
 import { logger } from "./logger.js";
 import { socketConnectionsActive } from "./metrics.js";
-import type { IMessage } from "../models/message.model.js";
+import Message, { type IMessage } from "../models/message.model.js";
+import Conversation, { getOrCreateDirect } from "../models/conversation.model.js";
 
 interface ServerToClientEvents {
   newMessage: (message: IMessage) => void;
   getOnlineUsers: (userIds: string[]) => void;
+  typing: (payload: { from: string; isTyping: boolean }) => void;
+  messagesRead: (payload: { by: string; conversationId: string; readAt: string }) => void;
 }
 
-interface ClientToServerEvents {}
+interface ClientToServerEvents {
+  typing: (payload: { to: string; isTyping: boolean }) => void;
+  markRead: (payload: { to: string }) => void;
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -66,6 +72,30 @@ io.on("connection", async (socket) => {
   socketConnectionsActive.inc();
 
   io.emit("getOnlineUsers", await getOnlineUserIds());
+
+  // relay typing state to the other participant (cross-node via the adapter)
+  socket.on("typing", ({ to, isTyping }) => {
+    if (typeof to !== "string") return;
+    io.to(userRoom(to)).emit("typing", { from: userId, isTyping: Boolean(isTyping) });
+  });
+
+  // receiver opened/viewed the chat → stamp readAt and tell the sender
+  socket.on("markRead", async ({ to }) => {
+    if (typeof to !== "string") return;
+    const conv = await getOrCreateDirect(userId, to);
+    const readAt = new Date();
+    const result = await Message.updateMany(
+      { conversationId: conv._id, receiverId: userId, readAt: { $exists: false } },
+      { $set: { readAt } }
+    );
+    if (result.modifiedCount === 0) return; // nothing new to acknowledge
+    await Conversation.updateOne({ _id: conv._id }, { $set: { [`unread.${userId}`]: 0 } });
+    io.to(userRoom(to)).emit("messagesRead", {
+      by: userId,
+      conversationId: String(conv._id),
+      readAt: readAt.toISOString(),
+    });
+  });
 
   socket.on("disconnect", async () => {
     socketConnectionsActive.dec();
