@@ -1,6 +1,6 @@
 import { useChatStore } from "../store/useChatStore";
 import { useEffect, useRef } from "react";
-import { Pin } from "lucide-react";
+import { Pin, Mic } from "lucide-react";
 
 import ChatHeader from "./ChatHeader";
 import MessageInput from "./MessageInput";
@@ -18,6 +18,7 @@ const ChatContainer = () => {
     subscribeToMessages,
     unsubscribeFromMessages,
     isTyping,
+    isRecordingPeer,
     markMessagesRead,
     users,
   } = useChatStore();
@@ -43,7 +44,7 @@ const ChatContainer = () => {
     if (messageEndRef.current && messages) {
       messageEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, isTyping]);
+  }, [messages, isTyping, isRecordingPeer]);
 
   if (isMessagesLoading) {
     return (
@@ -95,6 +96,20 @@ const ChatContainer = () => {
               <span className="size-2 rounded-full bg-base-content/40 animate-bounce [animation-delay:-0.3s]" />
               <span className="size-2 rounded-full bg-base-content/40 animate-bounce [animation-delay:-0.15s]" />
               <span className="size-2 rounded-full bg-base-content/40 animate-bounce" />
+            </div>
+          </div>
+        )}
+
+        {isRecordingPeer && (
+          <div className="chat chat-start" ref={messageEndRef}>
+            <div className="chat-image avatar">
+              <div className="size-10 rounded-full border">
+                <img src={selectedUser.profilePic || "/avatar.png"} alt="profile pic" />
+              </div>
+            </div>
+            <div className="chat-bubble bg-base-200 flex items-center gap-2 text-sm text-base-content/70">
+              <Mic className="size-4 text-red-500 animate-pulse" />
+              recording a voice note…
             </div>
           </div>
         )}

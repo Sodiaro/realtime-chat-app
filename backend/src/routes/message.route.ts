@@ -15,6 +15,14 @@ import {
   createGroup,
   getConversationMessages,
   sendToConversation,
+  toggleMute,
+  toggleArchive,
+  starMessage,
+  getStarred,
+  renameGroup,
+  addGroupMembers,
+  removeGroupMember,
+  leaveGroup,
 } from "../controllers/message.controller.js";
 
 const router = express.Router();
@@ -22,11 +30,18 @@ const router = express.Router();
 router.get("/users", protectRoute, getUsersForSidebar);
 router.get("/conversations", protectRoute, getConversations);
 router.get("/search", protectRoute, searchMessages);
+router.get("/starred", protectRoute, getStarred);
 
 // group / conversation routes (kept above the generic /:id)
 router.post("/group", protectRoute, createGroup);
 router.get("/conversation/:conversationId", protectRoute, getConversationMessages);
 router.post("/conversation/:conversationId", protectRoute, sendToConversation);
+router.patch("/conversation/:conversationId", protectRoute, renameGroup);
+router.post("/conversation/:conversationId/mute", protectRoute, toggleMute);
+router.post("/conversation/:conversationId/archive", protectRoute, toggleArchive);
+router.post("/conversation/:conversationId/members", protectRoute, addGroupMembers);
+router.delete("/conversation/:conversationId/members/:userId", protectRoute, removeGroupMember);
+router.post("/conversation/:conversationId/leave", protectRoute, leaveGroup);
 
 router.get("/:id", protectRoute, getMessages);
 router.post("/send/:id", protectRoute, sendMessage);
@@ -35,6 +50,7 @@ router.post("/:messageId/react", protectRoute, reactToMessage);
 router.post("/:messageId/pin", protectRoute, pinMessage);
 router.post("/:messageId/forward", protectRoute, forwardMessage);
 router.post("/:messageId/report", protectRoute, reportMessage);
+router.post("/:messageId/star", protectRoute, starMessage);
 router.patch("/:messageId", protectRoute, updateMessage);
 router.delete("/:messageId", protectRoute, deleteMessage);
 

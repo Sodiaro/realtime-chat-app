@@ -5,7 +5,7 @@ import Message, { type IMessage } from "../models/message.model.js";
 import Conversation, { getOrCreateDirect } from "../models/conversation.model.js";
 import Report from "../models/report.model.js";
 import cloudinary from "../lib/cloudinary.js";
-import { io, userRoom } from "../lib/socket.js";
+import { io, userRoom, getOnlineUserIds } from "../lib/socket.js";
 import { enqueueNewMessageNotification } from "../lib/queues.js";
 import { messagesSentTotal } from "../lib/metrics.js";
 
@@ -38,9 +38,13 @@ export const getConversations: RequestHandler = async (req, res, next) => {
       participants: c.participants,
       isGroup: c.isGroup,
       name: c.name,
+      admins: c.admins,
       lastMessage: c.lastMessage,
       lastMessageAt: c.lastMessageAt,
       unread: c.unread?.get(myId) ?? 0,
+      isMuted: c.mutedBy?.some((id) => String(id) === myId) ?? false,
+      isArchived: c.archivedBy?.some((id) => String(id) === myId) ?? false,
+      isAdmin: c.admins?.some((id) => String(id) === myId) ?? false,
     }));
 
     res.status(200).json(result);
@@ -139,11 +143,19 @@ export const sendMessage: RequestHandler = async (req, res, next) => {
 
     let audioUrl: string | undefined;
     if (audio) {
-      const uploadResponse = await cloudinary.uploader.upload(audio, { resource_type: "video" });
+      // transcode to mp3 so it plays in every browser (webm/opus doesn't)
+      const uploadResponse = await cloudinary.uploader.upload(audio, {
+        resource_type: "video",
+        format: "mp3",
+      });
       audioUrl = uploadResponse.secure_url;
     }
 
     const conversation = await getOrCreateDirect(senderId, String(receiverId));
+
+    // if the recipient is online, the message is delivered right away
+    const online = await getOnlineUserIds();
+    const deliveredAt = online.includes(String(receiverId)) ? new Date() : undefined;
 
     const newMessage = new Message({
       conversationId: conversation._id,
@@ -153,6 +165,7 @@ export const sendMessage: RequestHandler = async (req, res, next) => {
       image: imageUrl,
       audio: audioUrl,
       mentions: await resolveMentions(text, conversation.participants),
+      deliveredAt,
       replyTo: replyTo || undefined,
     });
 
@@ -542,7 +555,10 @@ export const sendToConversation: RequestHandler = async (req, res, next) => {
     let imageUrl: string | undefined;
     if (image) imageUrl = (await cloudinary.uploader.upload(image)).secure_url;
     let audioUrl: string | undefined;
-    if (audio) audioUrl = (await cloudinary.uploader.upload(audio, { resource_type: "video" })).secure_url;
+    if (audio)
+      audioUrl = (
+        await cloudinary.uploader.upload(audio, { resource_type: "video", format: "mp3" })
+      ).secure_url;
 
     const newMessage = new Message({
       conversationId: conversation._id,
@@ -569,6 +585,194 @@ export const sendToConversation: RequestHandler = async (req, res, next) => {
     }
 
     res.status(201).json(newMessage);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// notify every participant that a conversation's metadata changed
+async function emitConversationUpdated(conversationId: Types.ObjectId) {
+  const conv = await Conversation.findById(conversationId).populate("participants", "-password");
+  if (!conv) return;
+  for (const p of conv.participants) {
+    io.to(userRoom(String((p as { _id?: unknown })._id ?? p))).emit("conversationUpdated", conv);
+  }
+}
+
+// ---- mute / archive (per user) ----
+
+export const toggleMute: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const { conversationId } = req.params;
+    const conv = await Conversation.findById(conversationId);
+    if (!conv) return void res.status(404).json({ message: "Conversation not found" });
+    if (!conv.participants.map(String).includes(myId))
+      return void res.status(403).json({ message: "Not a participant" });
+
+    const muted = conv.mutedBy.some((id) => String(id) === myId);
+    await Conversation.updateOne(
+      { _id: conv._id },
+      muted ? { $pull: { mutedBy: myId } } : { $addToSet: { mutedBy: myId } }
+    );
+    res.status(200).json({ isMuted: !muted });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const toggleArchive: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const { conversationId } = req.params;
+    const conv = await Conversation.findById(conversationId);
+    if (!conv) return void res.status(404).json({ message: "Conversation not found" });
+    if (!conv.participants.map(String).includes(myId))
+      return void res.status(403).json({ message: "Not a participant" });
+
+    const archived = conv.archivedBy.some((id) => String(id) === myId);
+    await Conversation.updateOne(
+      { _id: conv._id },
+      archived ? { $pull: { archivedBy: myId } } : { $addToSet: { archivedBy: myId } }
+    );
+    res.status(200).json({ isArchived: !archived });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ---- starred messages ----
+
+export const starMessage: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const { messageId } = req.params;
+    const message = await Message.findById(messageId);
+    if (!message) return void res.status(404).json({ message: "Message not found" });
+
+    const conv = await Conversation.findById(message.conversationId);
+    if (!conv || !conv.participants.map(String).includes(myId))
+      return void res.status(403).json({ message: "Not allowed" });
+
+    const starred = message.starredBy.some((id) => String(id) === myId);
+    await Message.updateOne(
+      { _id: message._id },
+      starred ? { $pull: { starredBy: myId } } : { $addToSet: { starredBy: myId } }
+    );
+    res.status(200).json({ starred: !starred });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getStarred: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = req.user!._id;
+    const messages = await Message.find({ starredBy: myId, deletedAt: { $exists: false } })
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .populate("replyTo", "text senderId image deletedAt")
+      .lean();
+    res.status(200).json(messages);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ---- group management ----
+
+export const renameGroup: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const { conversationId } = req.params;
+    const { name } = req.body;
+    if (!name || !String(name).trim())
+      return void res.status(400).json({ message: "Name is required" });
+
+    const conv = await Conversation.findById(conversationId);
+    if (!conv || !conv.isGroup) return void res.status(404).json({ message: "Group not found" });
+    if (!conv.admins.map(String).includes(myId))
+      return void res.status(403).json({ message: "Admins only" });
+
+    conv.name = String(name).trim();
+    await conv.save();
+    await emitConversationUpdated(conv._id);
+    res.status(200).json(conv);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const addGroupMembers: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const { conversationId } = req.params;
+    const { members } = req.body;
+    if (!Array.isArray(members) || members.length === 0)
+      return void res.status(400).json({ message: "Members are required" });
+
+    const conv = await Conversation.findById(conversationId);
+    if (!conv || !conv.isGroup) return void res.status(404).json({ message: "Group not found" });
+    if (!conv.admins.map(String).includes(myId))
+      return void res.status(403).json({ message: "Admins only" });
+
+    const existing = conv.participants.map(String);
+    const added: string[] = [];
+    for (const m of members) {
+      if (!existing.includes(String(m))) {
+        conv.participants.push(m as unknown as Types.ObjectId);
+        added.push(String(m));
+      }
+    }
+    await conv.save();
+
+    const populated = await Conversation.findById(conv._id).populate("participants", "-password");
+    for (const m of added) io.to(userRoom(m)).emit("conversationCreated", populated!);
+    await emitConversationUpdated(conv._id);
+    res.status(200).json(populated);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const removeGroupMember: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const { conversationId, userId } = req.params;
+
+    const conv = await Conversation.findById(conversationId);
+    if (!conv || !conv.isGroup) return void res.status(404).json({ message: "Group not found" });
+    if (!conv.admins.map(String).includes(myId))
+      return void res.status(403).json({ message: "Admins only" });
+
+    await Conversation.updateOne(
+      { _id: conv._id },
+      { $pull: { participants: userId, admins: userId } }
+    );
+    io.to(userRoom(String(userId))).emit("conversationUpdated", conv); // removed user's UI
+    await emitConversationUpdated(conv._id);
+    res.status(200).json({ removed: true });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const leaveGroup: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const { conversationId } = req.params;
+
+    const conv = await Conversation.findById(conversationId);
+    if (!conv || !conv.isGroup) return void res.status(404).json({ message: "Group not found" });
+    if (!conv.participants.map(String).includes(myId))
+      return void res.status(403).json({ message: "Not a participant" });
+
+    await Conversation.updateOne(
+      { _id: conv._id },
+      { $pull: { participants: myId, admins: myId } }
+    );
+    await emitConversationUpdated(conv._id);
+    res.status(200).json({ left: true });
   } catch (error) {
     next(error);
   }

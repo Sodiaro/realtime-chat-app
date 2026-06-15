@@ -1,48 +1,92 @@
 import { useRef, useState } from "react";
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
-import { Image, Send, X, Reply, Mic, StopCircle } from "lucide-react";
+import { Image, Send, X, Reply, Mic, Pause, Play, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
+
+const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
 const MessageInput = () => {
   const [text, setText] = useState("");
   const [imagePreview, setImagePreview] = useState(null);
   const [recording, setRecording] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [seconds, setSeconds] = useState(0);
   const fileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
-  const { sendMessage, emitTyping, selectedUser, replyingTo, setReplyingTo } = useChatStore();
+  const canceledRef = useRef(false);
+  const timerRef = useRef(null);
+  const { sendMessage, emitTyping, emitRecording, selectedUser, replyingTo, setReplyingTo } =
+    useChatStore();
   const { authUser } = useAuthStore();
 
   // DMs can be blocked; groups can't
   const isBlocked =
     !selectedUser?.isGroup && authUser?.blockedUsers?.some((id) => id === selectedUser?._id);
 
+  const startTimer = () => {
+    timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
+  };
+  const stopTimer = () => clearInterval(timerRef.current);
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mr = new MediaRecorder(stream);
       chunksRef.current = [];
+      canceledRef.current = false;
       mr.ondataavailable = (e) => chunksRef.current.push(e.data);
       mr.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        const reader = new FileReader();
-        reader.onloadend = () => sendMessage({ audio: reader.result, replyTo: replyingTo?._id });
-        reader.readAsDataURL(blob);
         stream.getTracks().forEach((t) => t.stop());
+        stopTimer();
+        if (!canceledRef.current && chunksRef.current.length) {
+          const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+          const reader = new FileReader();
+          reader.onloadend = () => sendMessage({ audio: reader.result, replyTo: replyingTo?._id });
+          reader.readAsDataURL(blob);
+        }
+        setSeconds(0);
+        setPaused(false);
       };
       mr.start();
       mediaRecorderRef.current = mr;
       setRecording(true);
+      setSeconds(0);
+      startTimer();
+      emitRecording(true);
     } catch {
       toast.error("Microphone access denied");
     }
   };
 
-  const stopRecording = () => {
+  const togglePause = () => {
+    const mr = mediaRecorderRef.current;
+    if (!mr) return;
+    if (mr.state === "recording") {
+      mr.pause();
+      setPaused(true);
+      stopTimer();
+    } else if (mr.state === "paused") {
+      mr.resume();
+      setPaused(false);
+      startTimer();
+    }
+  };
+
+  const finishRecording = () => {
+    canceledRef.current = false;
     mediaRecorderRef.current?.stop();
     setRecording(false);
+    emitRecording(false);
+  };
+
+  const cancelRecording = () => {
+    canceledRef.current = true;
+    mediaRecorderRef.current?.stop();
+    setRecording(false);
+    emitRecording(false);
   };
 
   // emit "typing" on keystroke, auto-clear after a short idle gap
@@ -64,11 +108,8 @@ const MessageInput = () => {
       toast.error("Please select an image file");
       return;
     }
-
     const reader = new FileReader();
-    reader.onloadend = () => {
-      setImagePreview(reader.result);
-    };
+    reader.onloadend = () => setImagePreview(reader.result);
     reader.readAsDataURL(file);
   };
 
@@ -80,16 +121,9 @@ const MessageInput = () => {
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!text.trim() && !imagePreview) return;
-
     try {
       stopTyping();
-      await sendMessage({
-        text: text.trim(),
-        image: imagePreview,
-        replyTo: replyingTo?._id,
-      });
-
-      // Clear form
+      await sendMessage({ text: text.trim(), image: imagePreview, replyTo: replyingTo?._id });
       setText("");
       setImagePreview(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -108,7 +142,7 @@ const MessageInput = () => {
 
   return (
     <div className="p-4 w-full">
-      {replyingTo && (
+      {replyingTo && !recording && (
         <div className="mb-2 flex items-center gap-2 rounded-lg bg-base-200 px-3 py-2">
           <Reply className="size-4 shrink-0 opacity-60" />
           <div className="flex-1 min-w-0">
@@ -121,7 +155,7 @@ const MessageInput = () => {
         </div>
       )}
 
-      {imagePreview && (
+      {imagePreview && !recording && (
         <div className="mb-3 flex items-center gap-2">
           <div className="relative">
             <img
@@ -131,8 +165,7 @@ const MessageInput = () => {
             />
             <button
               onClick={removeImage}
-              className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-base-300
-              flex items-center justify-center"
+              className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-base-300 flex items-center justify-center"
               type="button"
             >
               <X className="size-3" />
@@ -141,43 +174,49 @@ const MessageInput = () => {
         </div>
       )}
 
-      <form onSubmit={handleSendMessage} className="flex items-center gap-2">
-        <div className="flex-1 flex gap-2">
-          <input
-            type="text"
-            className="w-full input input-bordered rounded-lg input-sm sm:input-md"
-            placeholder="Type a message..."
-            value={text}
-            onChange={handleTextChange}
-            onBlur={stopTyping}
-          />
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            ref={fileInputRef}
-            onChange={handleImageChange}
-          />
-
-          <button
-            type="button"
-            className={`hidden sm:flex btn btn-circle
-                     ${imagePreview ? "text-emerald-500" : "text-zinc-400"}`}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Image size={20} />
+      {recording ? (
+        <div className="flex items-center gap-2 rounded-lg bg-base-200 px-3 py-2">
+          <span className={`size-2.5 rounded-full bg-red-500 ${paused ? "" : "animate-pulse"}`} />
+          <span className="text-sm tabular-nums">{fmt(seconds)}</span>
+          <span className="text-sm opacity-60">{paused ? "Paused" : "Recording…"}</span>
+          <div className="flex-1" />
+          <button type="button" onClick={cancelRecording} className="btn btn-ghost btn-sm btn-circle" title="Cancel">
+            <Trash2 className="size-4" />
           </button>
+          <button type="button" onClick={togglePause} className="btn btn-ghost btn-sm btn-circle" title={paused ? "Resume" : "Pause"}>
+            {paused ? <Play className="size-4" /> : <Pause className="size-4" />}
+          </button>
+          <button type="button" onClick={finishRecording} className="btn btn-primary btn-sm btn-circle" title="Send">
+            <Send size={18} />
+          </button>
+        </div>
+      ) : (
+        <form onSubmit={handleSendMessage} className="flex items-center gap-2">
+          <div className="flex-1 flex gap-2">
+            <input
+              type="text"
+              className="w-full input input-bordered rounded-lg input-sm sm:input-md"
+              placeholder="Type a message..."
+              value={text}
+              onChange={handleTextChange}
+              onBlur={stopTyping}
+            />
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              ref={fileInputRef}
+              onChange={handleImageChange}
+            />
 
-          {recording ? (
             <button
               type="button"
-              onClick={stopRecording}
-              className="btn btn-circle btn-error animate-pulse"
-              title="Stop & send"
+              className={`hidden sm:flex btn btn-circle ${imagePreview ? "text-emerald-500" : "text-zinc-400"}`}
+              onClick={() => fileInputRef.current?.click()}
             >
-              <StopCircle size={20} />
+              <Image size={20} />
             </button>
-          ) : (
+
             <button
               type="button"
               onClick={startRecording}
@@ -186,16 +225,16 @@ const MessageInput = () => {
             >
               <Mic size={20} />
             </button>
-          )}
-        </div>
-        <button
-          type="submit"
-          className="btn btn-sm btn-circle"
-          disabled={!text.trim() && !imagePreview}
-        >
-          <Send size={22} />
-        </button>
-      </form>
+          </div>
+          <button
+            type="submit"
+            className="btn btn-sm btn-circle"
+            disabled={!text.trim() && !imagePreview}
+          >
+            <Send size={22} />
+          </button>
+        </form>
+      )}
     </div>
   );
 };

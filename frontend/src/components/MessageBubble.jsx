@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, CheckCheck, Pencil, Trash2, SmilePlus, X, Reply, Forward, Pin, Flag } from "lucide-react";
+import { Check, CheckCheck, Pencil, Trash2, SmilePlus, X, Reply, Forward, Pin, Flag, Star } from "lucide-react";
 import { useChatStore } from "../store/useChatStore";
 import { formatMessageTime } from "../lib/utils";
 
@@ -16,7 +16,7 @@ const renderText = (text) =>
   );
 
 const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
-  const { editMessage, deleteMessage, reactToMessage, setReplyingTo, setForwarding, pinMessage, reportMessage } =
+  const { editMessage, deleteMessage, reactToMessage, setReplyingTo, setForwarding, pinMessage, reportMessage, starMessage } =
     useChatStore();
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(message.text || "");
@@ -24,6 +24,7 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
 
   const isDeleted = Boolean(message.deletedAt);
   const mentionsMe = (message.mentions || []).some((id) => id === authUser._id);
+  const starredByMe = (message.starredBy || []).some((id) => id === authUser._id);
   const isGroup = selectedUser.isGroup;
   // in a group, the other messages can be from any member
   const sender = isGroup && !isOwn ? (users || []).find((u) => u._id === message.senderId) : null;
@@ -67,6 +68,7 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
         {isGroup && !isOwn && (
           <span className="text-xs font-medium opacity-70">{sender?.fullName || "Member"}</span>
         )}
+        {starredByMe && !isDeleted && <Star className="size-3 text-amber-400 fill-amber-400" title="Starred" />}
         {message.pinnedAt && !isDeleted && <Pin className="size-3 text-amber-500" title="Pinned" />}
         <time className="text-xs opacity-50 ml-1">{formatMessageTime(message.createdAt)}</time>
         {message.editedAt && !isDeleted && <span className="text-xs opacity-40">(edited)</span>}
@@ -74,6 +76,8 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
           !isDeleted &&
           (message.readAt ? (
             <CheckCheck className="size-3.5 text-sky-500" title="Seen" />
+          ) : message.deliveredAt ? (
+            <CheckCheck className="size-3.5 opacity-50" title="Delivered" />
           ) : (
             <Check className="size-3.5 opacity-50" title="Sent" />
           ))}
@@ -138,6 +142,9 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
             </button>
             <button className="btn btn-ghost btn-xs btn-circle" onClick={() => pinMessage(message._id)} title={message.pinnedAt ? "Unpin" : "Pin"}>
               <Pin className={`size-4 ${message.pinnedAt ? "text-amber-500" : ""}`} />
+            </button>
+            <button className="btn btn-ghost btn-xs btn-circle" onClick={() => starMessage(message._id)} title={starredByMe ? "Unstar" : "Star"}>
+              <Star className={`size-4 ${starredByMe ? "text-amber-400 fill-amber-400" : ""}`} />
             </button>
             {!isOwn && (
               <button className="btn btn-ghost btn-xs btn-circle" onClick={report} title="Report">

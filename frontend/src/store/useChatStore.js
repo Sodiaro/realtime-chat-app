@@ -3,6 +3,25 @@ import toast from "react-hot-toast";
 import { axiosInstance } from "../lib/axios";
 import { useAuthStore } from "./useAuthStore";
 
+// short notification beep (best-effort; browsers may block without a gesture)
+const playDing = () => {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    gain.gain.value = 0.05;
+    osc.start();
+    osc.stop(ctx.currentTime + 0.12);
+  } catch {
+    /* ignore */
+  }
+};
+
 export const useChatStore = create((set, get) => ({
   messages: [],
   users: [],
@@ -11,6 +30,7 @@ export const useChatStore = create((set, get) => ({
   isUsersLoading: false,
   isMessagesLoading: false,
   isTyping: false,
+  isRecordingPeer: false, // the other user is recording a voice note
   replyingTo: null, // message being replied to
   forwarding: null, // message being forwarded (opens the picker)
 
@@ -29,7 +49,7 @@ export const useChatStore = create((set, get) => ({
   getConversations: async () => {
     try {
       const res = await axiosInstance.get("/messages/conversations");
-      set({ conversations: res.data.filter((c) => c.isGroup) });
+      set({ conversations: res.data }); // all: groups + DMs (for unread badges)
     } catch {
       /* non-fatal */
     }
@@ -55,6 +75,17 @@ export const useChatStore = create((set, get) => ({
         : `/messages/${id}`;
       const res = await axiosInstance.get(url);
       set({ messages: res.data.messages ?? res.data });
+
+      // opening a chat clears its unread badge (server already zeroed it)
+      const sel = get().selectedUser;
+      set({
+        conversations: get().conversations.map((c) => {
+          const match = sel?.isGroup
+            ? c._id === sel._id
+            : !c.isGroup && c.participants?.some((p) => (p._id || p) === sel?._id);
+          return match ? { ...c, unread: 0 } : c;
+        }),
+      });
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to load messages");
     } finally {
@@ -81,23 +112,9 @@ export const useChatStore = create((set, get) => ({
 
     const socket = useAuthStore.getState().socket;
 
-    socket.on("newMessage", (newMessage) => {
-      const sel = get().selectedUser;
-      const belongs = sel?.isGroup
-        ? newMessage.conversationId === sel._id
-        : newMessage.senderId === sel?._id;
-      if (!belongs) return;
-
-      set({
-        messages: [...get().messages, newMessage],
-        isTyping: false, // a message arrived, so they've stopped typing
-      });
-      if (!sel.isGroup) get().markMessagesRead(); // we're viewing this DM
-    });
-
-    // a new group we were added to
-    socket.on("conversationCreated", (conversation) => {
-      set({ conversations: [conversation, ...get().conversations] });
+    socket.on("recording", ({ from, isRecording }) => {
+      if (from !== get().selectedUser?._id) return;
+      set({ isRecordingPeer: isRecording });
     });
 
     socket.on("typing", ({ from, isTyping }) => {
@@ -128,11 +145,117 @@ export const useChatStore = create((set, get) => ({
 
   unsubscribeFromMessages: () => {
     const socket = useAuthStore.getState().socket;
-    socket.off("newMessage");
     socket.off("typing");
+    socket.off("recording");
     socket.off("messagesRead");
     socket.off("messageUpdated");
+  },
+
+  // global listeners — set up once per session (App), survive chat switches
+  subscribeSocket: () => {
+    const socket = useAuthStore.getState().socket;
+    if (!socket) return;
+
+    socket.on("newMessage", (msg) => {
+      const sel = get().selectedUser;
+      const isDM = Boolean(msg.receiverId);
+      const isOpen =
+        !!sel && (sel.isGroup ? msg.conversationId === sel._id : isDM && msg.senderId === sel._id);
+
+      if (isOpen) {
+        set({
+          messages: [...get().messages, msg],
+          isTyping: false,
+          isRecordingPeer: false,
+        });
+        if (!sel.isGroup) get().markMessagesRead(); // read implies delivered
+      } else {
+        get().bumpUnread(msg.conversationId);
+        if (isDM) socket.emit("markDelivered", { to: msg.senderId }); // tell the sender
+      }
+
+      if (typeof document !== "undefined" && (document.hidden || !isOpen)) get().notify(msg);
+    });
+
+    socket.on("conversationCreated", (conversation) => {
+      set({ conversations: [conversation, ...get().conversations] });
+    });
+
+    socket.on("conversationUpdated", (conv) => {
+      const myId = useAuthStore.getState().authUser?._id;
+      const amIn = conv.participants?.some((p) => (p._id || p) === myId);
+      set((state) => {
+        const conversations = amIn
+          ? state.conversations.map((c) =>
+              c._id === conv._id
+                ? { ...c, name: conv.name, participants: conv.participants, admins: conv.admins }
+                : c
+            )
+          : state.conversations.filter((c) => c._id !== conv._id);
+        let selectedUser = state.selectedUser;
+        if (selectedUser?._id === conv._id) {
+          selectedUser = amIn
+            ? { ...selectedUser, fullName: conv.name, name: conv.name, participants: conv.participants, admins: conv.admins }
+            : null;
+        }
+        return { conversations, selectedUser };
+      });
+    });
+
+    // the other person's device received our messages → grey double-tick
+    socket.on("messagesDelivered", ({ by }) => {
+      const authUserId = useAuthStore.getState().authUser?._id;
+      if (by !== get().selectedUser?._id) return;
+      set({
+        messages: get().messages.map((m) =>
+          m.senderId === authUserId && !m.deliveredAt
+            ? { ...m, deliveredAt: new Date().toISOString() }
+            : m
+        ),
+      });
+    });
+  },
+
+  unsubscribeSocket: () => {
+    const socket = useAuthStore.getState().socket;
+    if (!socket) return;
+    socket.off("newMessage");
     socket.off("conversationCreated");
+    socket.off("conversationUpdated");
+    socket.off("messagesDelivered");
+  },
+
+  // increment a conversation's unread count locally (or refetch if unknown)
+  bumpUnread: (conversationId) => {
+    const convs = get().conversations;
+    const idx = convs.findIndex((c) => c._id === conversationId);
+    if (idx === -1) {
+      get().getConversations(); // first message of a new conversation
+      return;
+    }
+    const updated = [...convs];
+    updated[idx] = { ...updated[idx], unread: (updated[idx].unread || 0) + 1 };
+    set({ conversations: updated });
+  },
+
+  // browser notification for a message arriving outside the open/focused chat
+  notify: (msg) => {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    const conv = get().conversations.find((c) => c._id === msg.conversationId);
+    if (conv?.isMuted) return; // muted conversation — stay silent
+    const sender = get().users.find((u) => u._id === msg.senderId);
+    const body =
+      msg.text || (msg.image ? "📷 Photo" : msg.audio ? "🎤 Voice note" : "New message");
+    try {
+      const n = new Notification(sender?.fullName || "New message", {
+        body,
+        icon: sender?.profilePic || "/favicon.svg",
+      });
+      n.onclick = () => window.focus();
+    } catch {
+      /* ignore */
+    }
+    playDing();
   },
 
   reportMessage: async (messageId, reason) => {
@@ -190,6 +313,89 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
+  starMessage: async (messageId) => {
+    try {
+      const res = await axiosInstance.post(`/messages/${messageId}/star`);
+      const myId = useAuthStore.getState().authUser?._id;
+      set({
+        messages: get().messages.map((m) => {
+          if (m._id !== messageId) return m;
+          const starredBy = res.data.starred
+            ? [...(m.starredBy || []), myId]
+            : (m.starredBy || []).filter((id) => id !== myId);
+          return { ...m, starredBy };
+        }),
+      });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to star");
+    }
+  },
+
+  toggleMute: async (conversationId) => {
+    try {
+      const res = await axiosInstance.post(`/messages/conversation/${conversationId}/mute`);
+      set({
+        conversations: get().conversations.map((c) =>
+          c._id === conversationId ? { ...c, isMuted: res.data.isMuted } : c
+        ),
+      });
+      toast.success(res.data.isMuted ? "Muted" : "Unmuted");
+    } catch {
+      toast.error("Failed to mute");
+    }
+  },
+
+  toggleArchive: async (conversationId) => {
+    try {
+      const res = await axiosInstance.post(`/messages/conversation/${conversationId}/archive`);
+      set({
+        conversations: get().conversations.map((c) =>
+          c._id === conversationId ? { ...c, isArchived: res.data.isArchived } : c
+        ),
+      });
+      toast.success(res.data.isArchived ? "Archived" : "Unarchived");
+    } catch {
+      toast.error("Failed to archive");
+    }
+  },
+
+  renameGroup: async (conversationId, name) => {
+    try {
+      await axiosInstance.patch(`/messages/conversation/${conversationId}`, { name });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to rename");
+    }
+  },
+
+  addGroupMembers: async (conversationId, members) => {
+    try {
+      await axiosInstance.post(`/messages/conversation/${conversationId}/members`, { members });
+      toast.success("Members added");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to add members");
+    }
+  },
+
+  removeGroupMember: async (conversationId, userId) => {
+    try {
+      await axiosInstance.delete(`/messages/conversation/${conversationId}/members/${userId}`);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to remove member");
+    }
+  },
+
+  leaveGroup: async (conversationId) => {
+    try {
+      await axiosInstance.post(`/messages/conversation/${conversationId}/leave`);
+      set({
+        conversations: get().conversations.filter((c) => c._id !== conversationId),
+        selectedUser: null,
+      });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to leave");
+    }
+  },
+
   setReplyingTo: (message) => set({ replyingTo: message }),
   setForwarding: (message) => set({ forwarding: message }),
 
@@ -201,6 +407,13 @@ export const useChatStore = create((set, get) => ({
     socket.emit("typing", { to: selectedUser._id, isTyping });
   },
 
+  emitRecording: (isRecording) => {
+    const { selectedUser } = get();
+    const socket = useAuthStore.getState().socket;
+    if (!selectedUser || selectedUser.isGroup || !socket) return; // DMs only
+    socket.emit("recording", { to: selectedUser._id, isRecording });
+  },
+
   // signal that we've seen the selected user's messages
   markMessagesRead: () => {
     const { selectedUser } = get();
@@ -209,5 +422,5 @@ export const useChatStore = create((set, get) => ({
     socket.emit("markRead", { to: selectedUser._id });
   },
 
-  setSelectedUser: (selectedUser) => set({ selectedUser, isTyping: false }),
+  setSelectedUser: (selectedUser) => set({ selectedUser, isTyping: false, isRecordingPeer: false }),
 }));

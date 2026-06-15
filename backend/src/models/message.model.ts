@@ -14,6 +14,7 @@ export interface IMessage {
   image?: string;
   audio?: string;
   mentions: Types.ObjectId[];
+  deliveredAt?: Date;
   readAt?: Date;
   editedAt?: Date;
   deletedAt?: Date;
@@ -21,6 +22,7 @@ export interface IMessage {
   replyTo?: Types.ObjectId;
   forwardedFrom?: Types.ObjectId;
   reactions: IReaction[];
+  starredBy: Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -55,6 +57,9 @@ const messageSchema = new Schema<IMessage>(
       type: [{ type: Schema.Types.ObjectId, ref: "User" }],
       default: [],
     },
+    deliveredAt: {
+      type: Date,
+    },
     readAt: {
       type: Date,
     },
@@ -77,6 +82,10 @@ const messageSchema = new Schema<IMessage>(
     },
     reactions: {
       type: [{ userId: { type: Schema.Types.ObjectId, ref: "User" }, emoji: String }],
+      default: [],
+    },
+    starredBy: {
+      type: [{ type: Schema.Types.ObjectId, ref: "User" }],
       default: [],
     },
   },

@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { THEMES } from "../constants";
 import { useThemeStore } from "../store/useThemeStore";
+import { useAuthStore } from "../store/useAuthStore";
 import { Send } from "lucide-react";
 
 const PREVIEW_MESSAGES = [
@@ -9,10 +11,68 @@ const PREVIEW_MESSAGES = [
 
 const SettingsPage = () => {
   const { theme, setTheme } = useThemeStore();
+  const { authUser, changePassword, logoutAllDevices, deleteAccount } = useAuthStore();
+
+  const [curPw, setCurPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+
+  const onChangePassword = async () => {
+    if (!curPw || !newPw) return;
+    const ok = await changePassword(curPw, newPw);
+    if (ok) {
+      setCurPw("");
+      setNewPw("");
+    }
+  };
+
+  const onDelete = async () => {
+    if (window.confirm("Delete your account permanently? This cannot be undone.")) {
+      await deleteAccount();
+    }
+  };
 
   return (
-    <div className="h-screen container mx-auto px-4 pt-20 max-w-5xl">
+    <div className="min-h-screen container mx-auto px-4 pt-20 pb-10 max-w-5xl">
       <div className="space-y-6">
+        {authUser && (
+          <div className="rounded-xl border border-base-300 p-5 space-y-4">
+            <h2 className="text-lg font-semibold">Account security</h2>
+
+            <div className="grid sm:grid-cols-2 gap-3">
+              <input
+                type="password"
+                className="input input-bordered"
+                placeholder="Current password"
+                value={curPw}
+                onChange={(e) => setCurPw(e.target.value)}
+              />
+              <input
+                type="password"
+                className="input input-bordered"
+                placeholder="New password (min 6)"
+                value={newPw}
+                onChange={(e) => setNewPw(e.target.value)}
+              />
+            </div>
+            <button
+              onClick={onChangePassword}
+              disabled={!curPw || !newPw}
+              className="btn btn-primary btn-sm"
+            >
+              Change password
+            </button>
+
+            <div className="flex flex-wrap gap-2 pt-2 border-t border-base-300">
+              <button onClick={logoutAllDevices} className="btn btn-sm btn-outline">
+                Log out all other devices
+              </button>
+              <button onClick={onDelete} className="btn btn-sm btn-error btn-outline">
+                Delete account
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-col gap-1">
           <h2 className="text-lg font-semibold">Theme</h2>
           <p className="text-sm text-base-content/70">Choose a theme for your chat interface</p>

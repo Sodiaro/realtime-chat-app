@@ -6,9 +6,13 @@ export interface IUser {
   fullName: string;
   password: string;
   profilePic: string;
+  username?: string;
+  bio?: string;
+  status?: string;
   lastSeen?: Date;
   blockedUsers: Types.ObjectId[];
   isAdmin: boolean;
+  tokenVersion: number; // bump to invalidate all existing JWTs
   createdAt: Date;
   updatedAt: Date;
 }
@@ -33,6 +37,19 @@ const userSchema = new Schema<IUser>(
       type: String,
       default: "",
     },
+    username: {
+      type: String,
+      unique: true,
+      sparse: true, // allow many users without a username
+    },
+    bio: {
+      type: String,
+      maxlength: 200,
+    },
+    status: {
+      type: String,
+      maxlength: 80,
+    },
     lastSeen: {
       type: Date,
     },
@@ -43,6 +60,10 @@ const userSchema = new Schema<IUser>(
     isAdmin: {
       type: Boolean,
       default: false,
+    },
+    tokenVersion: {
+      type: Number,
+      default: 0,
     },
   },
   { timestamps: true }

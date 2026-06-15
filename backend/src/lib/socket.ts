@@ -16,14 +16,19 @@ interface ServerToClientEvents {
   newMessage: (message: IMessage) => void;
   getOnlineUsers: (userIds: string[]) => void;
   typing: (payload: { from: string; isTyping: boolean }) => void;
+  recording: (payload: { from: string; isRecording: boolean }) => void;
   messagesRead: (payload: { by: string; conversationId: string; readAt: string }) => void;
+  messagesDelivered: (payload: { by: string; conversationId: string }) => void;
   messageUpdated: (message: IMessage) => void;
   conversationCreated: (conversation: IConversation) => void;
+  conversationUpdated: (conversation: IConversation) => void;
 }
 
 interface ClientToServerEvents {
   typing: (payload: { to: string; isTyping: boolean }) => void;
+  recording: (payload: { to: string; isRecording: boolean }) => void;
   markRead: (payload: { to: string }) => void;
+  markDelivered: (payload: { to: string }) => void;
 }
 
 const app = express();
@@ -82,14 +87,20 @@ io.on("connection", async (socket) => {
     io.to(userRoom(to)).emit("typing", { from: userId, isTyping: Boolean(isTyping) });
   });
 
-  // receiver opened/viewed the chat → stamp readAt and tell the sender
+  // relay voice-note recording state to the other participant
+  socket.on("recording", ({ to, isRecording }) => {
+    if (typeof to !== "string") return;
+    io.to(userRoom(to)).emit("recording", { from: userId, isRecording: Boolean(isRecording) });
+  });
+
+  // receiver opened/viewed the chat → stamp readAt (+ delivered) and tell the sender
   socket.on("markRead", async ({ to }) => {
     if (typeof to !== "string") return;
     const conv = await getOrCreateDirect(userId, to);
     const readAt = new Date();
     const result = await Message.updateMany(
       { conversationId: conv._id, receiverId: userId, readAt: { $exists: false } },
-      { $set: { readAt } }
+      { $set: { readAt, deliveredAt: readAt } }
     );
     if (result.modifiedCount === 0) return; // nothing new to acknowledge
     await Conversation.updateOne({ _id: conv._id }, { $set: { [`unread.${userId}`]: 0 } });
@@ -98,6 +109,18 @@ io.on("connection", async (socket) => {
       conversationId: String(conv._id),
       readAt: readAt.toISOString(),
     });
+  });
+
+  // receiver's device got the message(s) but hasn't opened the chat yet
+  socket.on("markDelivered", async ({ to }) => {
+    if (typeof to !== "string") return;
+    const conv = await getOrCreateDirect(userId, to);
+    const result = await Message.updateMany(
+      { conversationId: conv._id, receiverId: userId, deliveredAt: { $exists: false } },
+      { $set: { deliveredAt: new Date() } }
+    );
+    if (result.modifiedCount === 0) return;
+    io.to(userRoom(to)).emit("messagesDelivered", { by: userId, conversationId: String(conv._id) });
   });
 
   socket.on("disconnect", async () => {

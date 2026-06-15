@@ -2,8 +2,12 @@ import jwt from "jsonwebtoken";
 import type { Response } from "express";
 import type { Types } from "mongoose";
 
-export const generateToken = (userId: Types.ObjectId | string, res: Response) => {
-  const token = jwt.sign({ userId }, process.env.JWT_SECRET as string, {
+export const generateToken = (
+  userId: Types.ObjectId | string,
+  res: Response,
+  tokenVersion = 0
+) => {
+  const token = jwt.sign({ userId, tokenVersion }, process.env.JWT_SECRET as string, {
     expiresIn: "7d",
   });
 

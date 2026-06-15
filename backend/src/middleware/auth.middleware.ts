@@ -13,12 +13,19 @@ export const protectRoute: RequestHandler = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as {
       userId: string;
+      tokenVersion?: number;
     };
 
     const user = await User.findById(decoded.userId).select("-password");
 
     if (!user) {
       res.status(404).json({ message: "User not found" });
+      return;
+    }
+
+    // a bumped tokenVersion invalidates older tokens (logout-all / password change)
+    if ((decoded.tokenVersion ?? 0) !== (user.tokenVersion ?? 0)) {
+      res.status(401).json({ message: "Session expired, please log in again" });
       return;
     }
 

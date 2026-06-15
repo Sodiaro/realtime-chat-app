@@ -1,10 +1,17 @@
 import { useState } from "react";
 import { useAuthStore } from "../store/useAuthStore";
-import { Camera, Mail, User } from "lucide-react";
+import { Camera, Mail, User, AtSign } from "lucide-react";
 
 const ProfilePage = () => {
   const { authUser, isUpdatingProfile, updateProfile } = useAuthStore();
   const [selectedImg, setSelectedImg] = useState(null);
+  const [username, setUsername] = useState(authUser?.username || "");
+  const [bio, setBio] = useState(authUser?.bio || "");
+  const [status, setStatus] = useState(authUser?.status || "");
+
+  const handleSaveDetails = async () => {
+    await updateProfile({ username, bio, status });
+  };
 
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
@@ -81,6 +88,50 @@ const ProfilePage = () => {
               </div>
               <p className="px-4 py-2.5 bg-base-200 rounded-lg border">{authUser?.email}</p>
             </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm text-zinc-400 flex items-center gap-2">
+                <AtSign className="w-4 h-4" />
+                Username
+              </label>
+              <input
+                className="input input-bordered w-full"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="username (3-20: letters, numbers, _)"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm text-zinc-400">Status</label>
+              <input
+                className="input input-bordered w-full"
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                maxLength={80}
+                placeholder="Hey there! I'm using DevChat"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm text-zinc-400">Bio</label>
+              <textarea
+                className="textarea textarea-bordered w-full"
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                maxLength={200}
+                rows={3}
+                placeholder="A short bio…"
+              />
+            </div>
+
+            <button
+              onClick={handleSaveDetails}
+              disabled={isUpdatingProfile}
+              className="btn btn-primary btn-sm"
+            >
+              {isUpdatingProfile ? "Saving…" : "Save details"}
+            </button>
           </div>
 
           <div className="mt-6 bg-base-300 rounded-xl p-6">

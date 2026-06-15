@@ -126,4 +126,18 @@ describe("socket", () => {
     const page = (await a.agent.get(`/api/messages/${b.id}`)).body;
     expect(page.messages.at(-1).readAt).toBeTruthy();
   });
+
+  it("marks a message delivered when the recipient is online", async () => {
+    const a = await makeUser("delA");
+    const b = await makeUser("delB");
+
+    const sockB: Socket = connect(b.cookie);
+    await new Promise<void>((r) => sockB.on("connect", () => r()));
+
+    await a.agent.post(`/api/messages/send/${b.id}`).send({ text: "deliver me" });
+    sockB.close();
+
+    const page = (await a.agent.get(`/api/messages/${b.id}`)).body;
+    expect(page.messages.at(-1).deliveredAt).toBeTruthy();
+  });
 });

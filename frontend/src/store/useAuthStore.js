@@ -76,8 +76,7 @@ export const useAuthStore = create((set, get) => ({
       set({ authUser: res.data });
       toast.success("Profile updated successfully");
     } catch (error) {
-      console.log("error in update profile:", error);
-      toast.error(error.response.data.message);
+      toast.error(error.response?.data?.message || "Failed to update profile");
     } finally {
       set({ isUpdatingProfile: false });
     }
@@ -92,11 +91,45 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
+  changePassword: async (currentPassword, newPassword) => {
+    try {
+      await axiosInstance.post("/auth/change-password", { currentPassword, newPassword });
+      toast.success("Password changed");
+      return true;
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to change password");
+      return false;
+    }
+  },
+
+  logoutAllDevices: async () => {
+    try {
+      await axiosInstance.post("/auth/logout-all");
+      toast.success("Logged out of all other devices");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed");
+    }
+  },
+
+  deleteAccount: async () => {
+    try {
+      await axiosInstance.delete("/auth/me");
+      set({ authUser: null });
+      get().disconnectSocket();
+      toast.success("Account deleted");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to delete account");
+    }
+  },
+
    connectSocket: () => {
     const { authUser } = get();
     if (!authUser || get().socket?.connected) return;
 
     const socket = io(BASE_URL, {
+      // send the JWT cookie on the handshake (socket auth needs it; required
+      // cross-origin in dev where 5173 → 5001)
+      withCredentials: true,
       query: {
         userId: authUser._id,
       },

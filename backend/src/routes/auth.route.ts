@@ -1,5 +1,15 @@
 import express from "express";
-import { login, logout, signup, updateProfile, checkAuth, blockUser } from "../controllers/auth.controller.js";
+import {
+  login,
+  logout,
+  signup,
+  updateProfile,
+  checkAuth,
+  blockUser,
+  changePassword,
+  logoutAllDevices,
+  deleteAccount,
+} from "../controllers/auth.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
 import { authLimiter } from "../middleware/rateLimit.js";
 
@@ -11,5 +21,8 @@ router.post("/logout", logout);
 router.put("/update-profile", protectRoute, updateProfile);
 router.get("/check", protectRoute, checkAuth);
 router.post("/block/:id", protectRoute, blockUser);
+router.post("/change-password", protectRoute, changePassword);
+router.post("/logout-all", protectRoute, logoutAllDevices);
+router.delete("/me", protectRoute, deleteAccount);
 
 export default router;

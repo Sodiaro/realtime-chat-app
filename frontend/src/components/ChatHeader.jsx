@@ -1,16 +1,25 @@
 import { useState } from "react";
-import { X, Search, Ban, Users } from "lucide-react";
+import { X, Search, Ban, Users, MoreVertical, BellOff, Bell, Archive, Info } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 import { axiosInstance } from "../lib/axios";
 import { formatLastSeen, formatMessageTime } from "../lib/utils";
+import GroupInfoModal from "./GroupInfoModal";
 
 const ChatHeader = () => {
-  const { selectedUser, setSelectedUser } = useChatStore();
+  const { selectedUser, setSelectedUser, conversations, toggleMute, toggleArchive } = useChatStore();
   const { onlineUsers, authUser, blockUser } = useAuthStore();
   const isGroup = selectedUser.isGroup;
   const isOnline = onlineUsers.includes(selectedUser._id);
   const isBlocked = !isGroup && authUser?.blockedUsers?.some((id) => id === selectedUser._id);
+  const [showGroupInfo, setShowGroupInfo] = useState(false);
+
+  // the conversation backing this chat (groups use their own id; DMs match by participant)
+  const conv = isGroup
+    ? conversations.find((c) => c._id === selectedUser._id)
+    : conversations.find(
+        (c) => !c.isGroup && c.participants?.some((p) => (p._id || p) === selectedUser._id)
+      );
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -54,14 +63,19 @@ const ChatHeader = () => {
           </div>
 
           <div>
-            <h3 className="font-medium">{isGroup ? selectedUser.fullName : selectedUser.fullName}</h3>
+            <h3 className="font-medium">
+              {selectedUser.fullName}
+              {!isGroup && selectedUser.username && (
+                <span className="ml-1.5 text-xs font-normal opacity-50">@{selectedUser.username}</span>
+              )}
+            </h3>
             <p className="text-sm text-base-content/70">
               {isGroup
                 ? `${selectedUser.participants?.length || 0} members`
                 : isBlocked
                   ? "Blocked"
                   : isOnline
-                    ? "Online"
+                    ? selectedUser.status || "Online"
                     : formatLastSeen(selectedUser.lastSeen)}
             </p>
           </div>
@@ -82,11 +96,47 @@ const ChatHeader = () => {
               <Ban className="size-5" />
             </button>
           )}
+
+          <div className="dropdown dropdown-end">
+            <button tabIndex={0} className="px-1" title="More">
+              <MoreVertical className="size-5" />
+            </button>
+            <ul tabIndex={0} className="dropdown-content menu bg-base-100 rounded-box shadow w-48 z-50 mt-2">
+              {isGroup && (
+                <li>
+                  <button onClick={() => setShowGroupInfo(true)}>
+                    <Info className="size-4" /> Group info
+                  </button>
+                </li>
+              )}
+              {conv && (
+                <li>
+                  <button onClick={() => toggleMute(conv._id)}>
+                    {conv.isMuted ? <Bell className="size-4" /> : <BellOff className="size-4" />}
+                    {conv.isMuted ? "Unmute" : "Mute"}
+                  </button>
+                </li>
+              )}
+              {conv && (
+                <li>
+                  <button onClick={() => toggleArchive(conv._id)}>
+                    <Archive className="size-4" />
+                    {conv.isArchived ? "Unarchive" : "Archive"}
+                  </button>
+                </li>
+              )}
+            </ul>
+          </div>
+
           <button onClick={() => setSelectedUser(null)}>
             <X />
           </button>
         </div>
       </div>
+
+      {showGroupInfo && isGroup && (
+        <GroupInfoModal conversation={selectedUser} onClose={() => setShowGroupInfo(false)} />
+      )}
 
       {searchOpen && (
         <div className="mt-2 relative">

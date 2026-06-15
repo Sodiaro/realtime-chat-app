@@ -3,7 +3,7 @@ import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
 import SidebarSkeleton from "./skeletons/SidebarSkeleton";
 import CreateGroupModal from "./CreateGroupModal";
-import { Users, UsersRound, Plus } from "lucide-react";
+import { Users, UsersRound, Plus, BellOff, Archive } from "lucide-react";
 
 const Sidebar = () => {
   const {
@@ -19,6 +19,7 @@ const Sidebar = () => {
   const { onlineUsers } = useAuthStore();
   const [showOnlineOnly, setShowOnlineOnly] = useState(false);
   const [showGroupModal, setShowGroupModal] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
     getUsers();
@@ -28,6 +29,82 @@ const Sidebar = () => {
   const filteredUsers = showOnlineOnly
     ? users.filter((user) => onlineUsers.includes(user._id))
     : users;
+
+  const convForUser = (userId) =>
+    conversations.find((c) => !c.isGroup && c.participants?.some((p) => (p._id || p) === userId));
+  const lastAt = (conv) => (conv?.lastMessageAt ? new Date(conv.lastMessageAt).getTime() : 0);
+
+  // groups + DMs, newest activity first
+  const groups = conversations
+    .filter((c) => c.isGroup)
+    .sort((a, b) => lastAt(b) - lastAt(a));
+  const usersWithConv = filteredUsers
+    .map((u) => ({ u, conv: convForUser(u._id) }))
+    .sort((a, b) => lastAt(b.conv) - lastAt(a.conv));
+
+  const activeGroups = groups.filter((g) => !g.isArchived);
+  const archivedGroups = groups.filter((g) => g.isArchived);
+  const activeUsers = usersWithConv.filter((x) => !x.conv?.isArchived);
+  const archivedUsers = usersWithConv.filter((x) => x.conv?.isArchived);
+  const archivedCount = archivedGroups.length + archivedUsers.length;
+
+  const Badge = ({ count }) =>
+    count > 0 ? (
+      <span className="ml-auto badge badge-primary badge-sm">{count > 99 ? "99+" : count}</span>
+    ) : null;
+
+  const GroupRow = (c) => (
+    <button
+      key={c._id}
+      onClick={() => setSelectedUser({ ...c, fullName: c.name })}
+      className={`w-full p-3 flex items-center gap-3 hover:bg-base-300 transition-colors ${
+        selectedUser?._id === c._id ? "bg-base-300 ring-1 ring-base-300" : ""
+      }`}
+    >
+      <div className="size-12 rounded-full bg-base-300 grid place-items-center mx-auto lg:mx-0 shrink-0">
+        <UsersRound className="size-6" />
+      </div>
+      <div className="hidden lg:flex items-center w-full text-left min-w-0 gap-1">
+        <div className="min-w-0">
+          <div className="font-medium truncate">{c.name}</div>
+          <div className="text-sm text-zinc-400">{c.participants?.length || 0} members</div>
+        </div>
+        {c.isMuted && <BellOff className="size-3.5 opacity-50 ml-auto" />}
+        <Badge count={c.unread} />
+      </div>
+    </button>
+  );
+
+  const UserRow = ({ u: user, conv }) => (
+    <button
+      key={user._id}
+      onClick={() => setSelectedUser(user)}
+      className={`w-full p-3 flex items-center gap-3 hover:bg-base-300 transition-colors ${
+        selectedUser?._id === user._id ? "bg-base-300 ring-1 ring-base-300" : ""
+      }`}
+    >
+      <div className="relative mx-auto lg:mx-0 shrink-0">
+        <img
+          src={user.profilePic || "/avatar.png"}
+          alt={user.fullName}
+          className="size-12 object-cover rounded-full"
+        />
+        {onlineUsers.includes(user._id) && (
+          <span className="absolute bottom-0 right-0 size-3 bg-green-500 rounded-full ring-2 ring-zinc-900" />
+        )}
+      </div>
+      <div className="hidden lg:flex items-center w-full text-left min-w-0 gap-1">
+        <div className="min-w-0">
+          <div className="font-medium truncate">{user.fullName}</div>
+          <div className="text-sm text-zinc-400">
+            {onlineUsers.includes(user._id) ? "Online" : "Offline"}
+          </div>
+        </div>
+        {conv?.isMuted && <BellOff className="size-3.5 opacity-50 ml-auto" />}
+        <Badge count={conv?.unread || 0} />
+      </div>
+    </button>
+  );
 
   if (isUsersLoading) return <SidebarSkeleton />;
 
@@ -47,7 +124,6 @@ const Sidebar = () => {
             <Plus className="size-5" />
           </button>
         </div>
-        {/* TODO: Online filter toggle */}
         <div className="mt-3 hidden lg:flex items-center gap-2">
           <label className="cursor-pointer flex items-center gap-2">
             <input
@@ -63,66 +139,36 @@ const Sidebar = () => {
       </div>
 
       <div className="overflow-y-auto w-full py-3">
-        {conversations.length > 0 && (
-          <div className="pb-2">
+        {activeGroups.length > 0 && (
+          <div className="pb-1">
             <p className="px-3 pb-1 text-xs uppercase opacity-50 hidden lg:block">Groups</p>
-            {conversations.map((c) => (
-              <button
-                key={c._id}
-                onClick={() => setSelectedUser({ ...c, fullName: c.name })}
-                className={`w-full p-3 flex items-center gap-3 hover:bg-base-300 transition-colors ${
-                  selectedUser?._id === c._id ? "bg-base-300 ring-1 ring-base-300" : ""
-                }`}
-              >
-                <div className="size-12 rounded-full bg-base-300 grid place-items-center mx-auto lg:mx-0">
-                  <UsersRound className="size-6" />
-                </div>
-                <div className="hidden lg:block text-left min-w-0">
-                  <div className="font-medium truncate">{c.name}</div>
-                  <div className="text-sm text-zinc-400">{c.participants?.length || 0} members</div>
-                </div>
-              </button>
-            ))}
+            {activeGroups.map(GroupRow)}
             <p className="px-3 pt-2 pb-1 text-xs uppercase opacity-50 hidden lg:block">Direct</p>
           </div>
         )}
 
-        {filteredUsers.map((user) => (
-          <button
-            key={user._id}
-            onClick={() => setSelectedUser(user)}
-            className={`
-              w-full p-3 flex items-center gap-3
-              hover:bg-base-300 transition-colors
-              ${selectedUser?._id === user._id ? "bg-base-300 ring-1 ring-base-300" : ""}
-            `}
-          >
-            <div className="relative mx-auto lg:mx-0">
-              <img
-                src={user.profilePic || "/avatar.png"}
-                alt={user.name}
-                className="size-12 object-cover rounded-full"
-              />
-              {onlineUsers.includes(user._id) && (
-                <span
-                  className="absolute bottom-0 right-0 size-3 bg-green-500 
-                  rounded-full ring-2 ring-zinc-900"
-                />
-              )}
-            </div>
-
-            {/* User info - only visible on larger screens */}
-            <div className="hidden lg:block text-left min-w-0">
-              <div className="font-medium truncate">{user.fullName}</div>
-              <div className="text-sm text-zinc-400">
-                {onlineUsers.includes(user._id) ? "Online" : "Offline"}
-              </div>
-            </div>
-          </button>
+        {activeUsers.map((x) => (
+          <UserRow key={x.u._id} {...x} />
         ))}
 
-        {filteredUsers.length === 0 && (
-          <div className="text-center text-zinc-500 py-4">No online users</div>
+        {archivedCount > 0 && (
+          <div className="mt-2 border-t border-base-300 pt-2">
+            <button
+              onClick={() => setShowArchived((v) => !v)}
+              className="w-full px-3 py-2 flex items-center gap-2 text-sm opacity-70 hover:bg-base-300"
+            >
+              <Archive className="size-4" />
+              <span className="hidden lg:inline">Archived ({archivedCount})</span>
+            </button>
+            {showArchived && (
+              <>
+                {archivedGroups.map(GroupRow)}
+                {archivedUsers.map((x) => (
+                  <UserRow key={x.u._id} {...x} />
+                ))}
+              </>
+            )}
+          </div>
         )}
       </div>
 

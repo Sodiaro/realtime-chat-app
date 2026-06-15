@@ -10,6 +10,8 @@ export interface IConversation {
   lastMessage?: Types.ObjectId;
   lastMessageAt?: Date;
   unread: Map<string, number>; // userId -> unread count
+  mutedBy: Types.ObjectId[];
+  archivedBy: Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -24,6 +26,8 @@ const conversationSchema = new Schema<IConversation>(
     lastMessage: { type: Schema.Types.ObjectId, ref: "Message" },
     lastMessageAt: { type: Date },
     unread: { type: Map, of: Number, default: {} },
+    mutedBy: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    archivedBy: [{ type: Schema.Types.ObjectId, ref: "User" }],
   },
   { timestamps: true }
 );
