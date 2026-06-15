@@ -1,8 +1,9 @@
 import type { RequestHandler } from "express";
 import User from "../models/user.model.js";
 import Message from "../models/message.model.js";
+import Conversation, { getOrCreateDirect } from "../models/conversation.model.js";
 import cloudinary from "../lib/cloudinary.js";
-import { io, getReceiverSocketId } from "../lib/socket.js";
+import { io, userRoom } from "../lib/socket.js";
 
 export const getUsersForSidebar: RequestHandler = async (req, res, next) => {
   try {
@@ -18,19 +19,41 @@ export const getUsersForSidebar: RequestHandler = async (req, res, next) => {
   }
 };
 
+// the current user's conversations, newest first, with their unread count
+export const getConversations: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const conversations = await Conversation.find({ participants: myId })
+      .sort({ lastMessageAt: -1 })
+      .limit(100)
+      .populate("lastMessage")
+      .populate("participants", "-password");
+
+    const result = conversations.map((c) => ({
+      _id: c._id,
+      participants: c.participants,
+      isGroup: c.isGroup,
+      lastMessage: c.lastMessage,
+      lastMessageAt: c.lastMessageAt,
+      unread: c.unread?.get(myId) ?? 0,
+    }));
+
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getMessages: RequestHandler = async (req, res, next) => {
   try {
     const { id: userToChatId } = req.params;
     const myId = req.user!._id;
 
+    const conversation = await getOrCreateDirect(myId, String(userToChatId));
+
     // pass ?cursor=<createdAt> to page back through older messages
     const limit = Math.min(Number(req.query.limit) || 30, 100);
-    const query: Record<string, unknown> = {
-      $or: [
-        { senderId: myId, receiverId: userToChatId },
-        { senderId: userToChatId, receiverId: myId },
-      ],
-    };
+    const query: Record<string, unknown> = { conversationId: conversation._id };
     if (req.query.cursor) {
       query.createdAt = { $lt: new Date(String(req.query.cursor)) };
     }
@@ -43,6 +66,12 @@ export const getMessages: RequestHandler = async (req, res, next) => {
 
     const messages = page.reverse();
     const nextCursor = page.length === limit ? messages[0]?.createdAt : null;
+
+    // opening a chat clears my unread for it
+    await Conversation.updateOne(
+      { _id: conversation._id },
+      { $set: { [`unread.${String(myId)}`]: 0 } }
+    );
 
     res.status(200).json({ messages, nextCursor });
   } catch (error) {
@@ -67,7 +96,10 @@ export const sendMessage: RequestHandler = async (req, res, next) => {
       imageUrl = uploadResponse.secure_url;
     }
 
+    const conversation = await getOrCreateDirect(senderId, String(receiverId));
+
     const newMessage = new Message({
+      conversationId: conversation._id,
       senderId,
       receiverId,
       text,
@@ -76,10 +108,17 @@ export const sendMessage: RequestHandler = async (req, res, next) => {
 
     await newMessage.save();
 
-    const receiverSocketId = getReceiverSocketId(String(receiverId));
-    if (receiverSocketId) {
-      io.to(receiverSocketId).emit("newMessage", newMessage);
-    }
+    // bump conversation metadata + the receiver's unread count
+    await Conversation.updateOne(
+      { _id: conversation._id },
+      {
+        $set: { lastMessage: newMessage._id, lastMessageAt: newMessage.createdAt },
+        $inc: { [`unread.${String(receiverId)}`]: 1 },
+      }
+    );
+
+    // room delivery reaches all of the receiver's devices, on any node
+    io.to(userRoom(String(receiverId))).emit("newMessage", newMessage);
 
     res.status(201).json(newMessage);
   } catch (error) {

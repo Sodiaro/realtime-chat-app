@@ -3,7 +3,9 @@ import http from "http";
 import express from "express";
 import jwt from "jsonwebtoken";
 import { parse as parseCookie } from "cookie";
+import { createAdapter } from "@socket.io/redis-adapter";
 import { corsOrigins } from "./env.js";
+import { createAdapterClients, redisEnabled } from "./redis.js";
 import type { IMessage } from "../models/message.model.js";
 
 interface ServerToClientEvents {
@@ -11,7 +13,7 @@ interface ServerToClientEvents {
   getOnlineUsers: (userIds: string[]) => void;
 }
 
-// no client→server events yet (Phase C)
+// no client→server events yet
 interface ClientToServerEvents {}
 
 const app = express();
@@ -24,12 +26,24 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(server, {
   },
 });
 
-export function getReceiverSocketId(userId: string): string | undefined {
-  return userSocketMap[userId];
+// With Redis, room state is shared across instances so we can scale horizontally.
+const adapterClients = createAdapterClients();
+if (adapterClients) {
+  io.adapter(createAdapter(adapterClients.pubClient, adapterClients.subClient));
+  console.log("Socket.IO Redis adapter enabled (multi-node)");
 }
 
-// used to store online users  {userId: socketId}
-const userSocketMap: Record<string, string> = {};
+const userRoom = (userId: string) => `user:${userId}`;
+
+// Online users are derived from the user:* rooms, so it works across nodes and
+// counts a user online until their last device disconnects.
+export async function getOnlineUserIds(): Promise<string[]> {
+  const adapter = io.of("/").adapter as unknown as {
+    allRooms(): Promise<Set<string>>;
+  };
+  const rooms = await adapter.allRooms();
+  return [...rooms].filter((r) => r.startsWith("user:")).map((r) => r.slice(5));
+}
 
 // take userId from the verified JWT, not the handshake query — clients can fake that
 io.use((socket, next) => {
@@ -48,18 +62,16 @@ io.use((socket, next) => {
   }
 });
 
-io.on("connection", (socket) => {
+io.on("connection", async (socket) => {
   const userId = socket.userId!;
-  userSocketMap[userId] = socket.id;
+  socket.join(userRoom(userId));
 
-  socket.join(`user:${userId}`);
+  io.emit("getOnlineUsers", await getOnlineUserIds());
 
-  io.emit("getOnlineUsers", Object.keys(userSocketMap));
-
-  socket.on("disconnect", () => {
-    delete userSocketMap[userId];
-    io.emit("getOnlineUsers", Object.keys(userSocketMap));
+  socket.on("disconnect", async () => {
+    // rooms are already left by now, so this reflects the post-disconnect state
+    io.emit("getOnlineUsers", await getOnlineUserIds());
   });
 });
 
-export { io, app, server };
+export { io, app, server, userRoom, redisEnabled };

@@ -2,6 +2,7 @@ import mongoose, { Schema, Types } from "mongoose";
 
 export interface IMessage {
   _id: Types.ObjectId;
+  conversationId: Types.ObjectId;
   senderId: Types.ObjectId;
   receiverId: Types.ObjectId;
   text?: string;
@@ -12,6 +13,12 @@ export interface IMessage {
 
 const messageSchema = new Schema<IMessage>(
   {
+    conversationId: {
+      type: Schema.Types.ObjectId,
+      ref: "Conversation",
+      required: true,
+      index: true,
+    },
     senderId: {
       type: Schema.Types.ObjectId,
       ref: "User",
@@ -33,6 +40,7 @@ const messageSchema = new Schema<IMessage>(
 );
 
 messageSchema.index({ senderId: 1, receiverId: 1, createdAt: 1 });
+messageSchema.index({ conversationId: 1, createdAt: -1 }); // paginated reads
 
 const Message = mongoose.model<IMessage>("Message", messageSchema);
 export default Message;

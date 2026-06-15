@@ -1,4 +1,7 @@
 import rateLimit from "express-rate-limit";
+import { env } from "../lib/env.js";
+
+const skip = () => env.NODE_ENV === "test";
 
 // tight cap on login/signup to slow down brute-force attempts
 export const authLimiter = rateLimit({
@@ -6,6 +9,7 @@ export const authLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  skip,
   message: { message: "Too many attempts, please try again later." },
 });
 
@@ -14,5 +18,6 @@ export const apiLimiter = rateLimit({
   max: 200,
   standardHeaders: true,
   legacyHeaders: false,
+  skip,
   message: { message: "Too many requests, please slow down." },
 });

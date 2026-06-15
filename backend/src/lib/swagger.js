@@ -33,6 +33,7 @@ export const openapiSpec = {
         type: "object",
         properties: {
           _id: { type: "string" },
+          conversationId: { type: "string" },
           senderId: { type: "string" },
           receiverId: { type: "string" },
           text: { type: "string", example: "hey there" },
@@ -149,6 +150,37 @@ export const openapiSpec = {
         security: [{ cookieAuth: [] }],
         responses: {
           200: { description: "Up to 100 users", content: { "application/json": { schema: { type: "array", items: { $ref: "#/components/schemas/User" } } } } },
+          401: { description: "Not authenticated" },
+        },
+      },
+    },
+    "/api/messages/conversations": {
+      get: {
+        tags: ["Messages"],
+        summary: "List my conversations (newest first) with unread counts",
+        security: [{ cookieAuth: [] }],
+        responses: {
+          200: {
+            description: "Conversations with last message and my unread count",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      _id: { type: "string" },
+                      participants: { type: "array", items: { $ref: "#/components/schemas/User" } },
+                      isGroup: { type: "boolean" },
+                      lastMessage: { $ref: "#/components/schemas/Message" },
+                      lastMessageAt: { type: "string", format: "date-time" },
+                      unread: { type: "integer", example: 3 },
+                    },
+                  },
+                },
+              },
+            },
+          },
           401: { description: "Not authenticated" },
         },
       },
