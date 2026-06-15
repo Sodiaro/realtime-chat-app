@@ -1,5 +1,10 @@
 import mongoose, { Schema, Types } from "mongoose";
 
+export interface IReaction {
+  userId: Types.ObjectId;
+  emoji: string;
+}
+
 export interface IMessage {
   _id: Types.ObjectId;
   conversationId: Types.ObjectId;
@@ -8,6 +13,9 @@ export interface IMessage {
   text?: string;
   image?: string;
   readAt?: Date;
+  editedAt?: Date;
+  deletedAt?: Date;
+  reactions: IReaction[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -39,12 +47,21 @@ const messageSchema = new Schema<IMessage>(
     readAt: {
       type: Date,
     },
+    editedAt: {
+      type: Date,
+    },
+    deletedAt: {
+      type: Date,
+    },
+    reactions: {
+      type: [{ userId: { type: Schema.Types.ObjectId, ref: "User" }, emoji: String }],
+      default: [],
+    },
   },
   { timestamps: true }
 );
 
-messageSchema.index({ senderId: 1, receiverId: 1, createdAt: 1 });
-messageSchema.index({ conversationId: 1, createdAt: -1 }); // paginated reads
+messageSchema.index({ conversationId: 1, createdAt: -1 });
 
 const Message = mongoose.model<IMessage>("Message", messageSchema);
 export default Message;

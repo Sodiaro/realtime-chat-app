@@ -10,12 +10,14 @@ import { logger } from "./logger.js";
 import { socketConnectionsActive } from "./metrics.js";
 import Message, { type IMessage } from "../models/message.model.js";
 import Conversation, { getOrCreateDirect } from "../models/conversation.model.js";
+import User from "../models/user.model.js";
 
 interface ServerToClientEvents {
   newMessage: (message: IMessage) => void;
   getOnlineUsers: (userIds: string[]) => void;
   typing: (payload: { from: string; isTyping: boolean }) => void;
   messagesRead: (payload: { by: string; conversationId: string; readAt: string }) => void;
+  messageUpdated: (message: IMessage) => void;
 }
 
 interface ClientToServerEvents {
@@ -99,7 +101,12 @@ io.on("connection", async (socket) => {
 
   socket.on("disconnect", async () => {
     socketConnectionsActive.dec();
-    io.emit("getOnlineUsers", await getOnlineUserIds());
+    const online = await getOnlineUserIds();
+    // if this was the user's last device, stamp their last-seen time
+    if (!online.includes(userId)) {
+      await User.updateOne({ _id: userId }, { $set: { lastSeen: new Date() } }).catch(() => {});
+    }
+    io.emit("getOnlineUsers", online);
   });
 });
 

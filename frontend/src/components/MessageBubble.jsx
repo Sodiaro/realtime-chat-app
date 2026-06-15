@@ -1,0 +1,135 @@
+import { useState } from "react";
+import { Check, CheckCheck, Pencil, Trash2, SmilePlus, X } from "lucide-react";
+import { useChatStore } from "../store/useChatStore";
+import { formatMessageTime } from "../lib/utils";
+
+const EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+
+const MessageBubble = ({ message, isOwn, authUser, selectedUser }) => {
+  const { editMessage, deleteMessage, reactToMessage } = useChatStore();
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(message.text || "");
+  const [showPicker, setShowPicker] = useState(false);
+
+  const isDeleted = Boolean(message.deletedAt);
+
+  const submitEdit = async () => {
+    const trimmed = editText.trim();
+    if (trimmed && trimmed !== message.text) await editMessage(message._id, trimmed);
+    setEditing(false);
+  };
+
+  const react = (emoji) => {
+    reactToMessage(message._id, emoji);
+    setShowPicker(false);
+  };
+
+  // group reactions by emoji → { "👍": 2, ... }
+  const grouped = (message.reactions || []).reduce((acc, r) => {
+    acc[r.emoji] = (acc[r.emoji] || 0) + 1;
+    return acc;
+  }, {});
+
+  return (
+    <div className={`chat ${isOwn ? "chat-end" : "chat-start"} group`}>
+      <div className="chat-image avatar">
+        <div className="size-10 rounded-full border">
+          <img
+            src={(isOwn ? authUser.profilePic : selectedUser.profilePic) || "/avatar.png"}
+            alt="profile pic"
+          />
+        </div>
+      </div>
+
+      <div className="chat-header mb-1 flex items-center gap-1">
+        <time className="text-xs opacity-50 ml-1">{formatMessageTime(message.createdAt)}</time>
+        {message.editedAt && !isDeleted && <span className="text-xs opacity-40">(edited)</span>}
+        {isOwn &&
+          !isDeleted &&
+          (message.readAt ? (
+            <CheckCheck className="size-3.5 text-sky-500" title="Seen" />
+          ) : (
+            <Check className="size-3.5 opacity-50" title="Sent" />
+          ))}
+      </div>
+
+      <div className="chat-bubble flex flex-col relative">
+        {isDeleted ? (
+          <p className="italic opacity-60">This message was deleted</p>
+        ) : editing ? (
+          <div className="flex items-center gap-2">
+            <input
+              autoFocus
+              className="input input-xs input-bordered text-base-content"
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitEdit();
+                if (e.key === "Escape") setEditing(false);
+              }}
+            />
+            <button onClick={submitEdit} className="text-xs underline">save</button>
+            <button onClick={() => setEditing(false)}><X className="size-3.5" /></button>
+          </div>
+        ) : (
+          <>
+            {message.image && (
+              <img src={message.image} alt="Attachment" className="sm:max-w-[200px] rounded-md mb-2" />
+            )}
+            {message.text && <p>{message.text}</p>}
+          </>
+        )}
+
+        {/* hover actions */}
+        {!isDeleted && !editing && (
+          <div
+            className={`absolute -top-3 ${isOwn ? "left-0 -translate-x-full pr-2" : "right-0 translate-x-full pl-2"}
+              opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1`}
+          >
+            <button className="btn btn-ghost btn-xs btn-circle" onClick={() => setShowPicker((v) => !v)} title="React">
+              <SmilePlus className="size-4" />
+            </button>
+            {isOwn && (
+              <>
+                <button className="btn btn-ghost btn-xs btn-circle" onClick={() => { setEditText(message.text || ""); setEditing(true); }} title="Edit">
+                  <Pencil className="size-4" />
+                </button>
+                <button className="btn btn-ghost btn-xs btn-circle text-error" onClick={() => deleteMessage(message._id)} title="Delete">
+                  <Trash2 className="size-4" />
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* emoji picker */}
+        {showPicker && (
+          <div className="absolute -bottom-9 z-10 flex gap-1 bg-base-100 border border-base-300 rounded-full px-2 py-1 shadow">
+            {EMOJIS.map((e) => (
+              <button key={e} className="hover:scale-125 transition-transform" onClick={() => react(e)}>
+                {e}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* reaction chips */}
+      {Object.keys(grouped).length > 0 && (
+        <div className="chat-footer flex gap-1 mt-1">
+          {Object.entries(grouped).map(([emoji, count]) => (
+            <button
+              key={emoji}
+              onClick={() => react(emoji)}
+              className="text-xs bg-base-200 hover:bg-base-300 rounded-full px-2 py-0.5"
+            >
+              {emoji} {count}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default MessageBubble;

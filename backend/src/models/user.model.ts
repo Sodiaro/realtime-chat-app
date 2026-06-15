@@ -6,6 +6,7 @@ export interface IUser {
   fullName: string;
   password: string;
   profilePic: string;
+  lastSeen?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,6 +30,9 @@ const userSchema = new Schema<IUser>(
     profilePic: {
       type: String,
       default: "",
+    },
+    lastSeen: {
+      type: Date,
     },
   },
   { timestamps: true }

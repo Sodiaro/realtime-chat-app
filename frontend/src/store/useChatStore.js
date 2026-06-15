@@ -79,6 +79,13 @@ export const useChatStore = create((set, get) => ({
         ),
       });
     });
+
+    // edits, deletes and reactions arrive as a full replacement of the message
+    socket.on("messageUpdated", (updated) => {
+      set({
+        messages: get().messages.map((m) => (m._id === updated._id ? updated : m)),
+      });
+    });
   },
 
   unsubscribeFromMessages: () => {
@@ -86,6 +93,34 @@ export const useChatStore = create((set, get) => ({
     socket.off("newMessage");
     socket.off("typing");
     socket.off("messagesRead");
+    socket.off("messageUpdated");
+  },
+
+  editMessage: async (messageId, text) => {
+    try {
+      const res = await axiosInstance.patch(`/messages/${messageId}`, { text });
+      set({ messages: get().messages.map((m) => (m._id === messageId ? res.data : m)) });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to edit message");
+    }
+  },
+
+  deleteMessage: async (messageId) => {
+    try {
+      const res = await axiosInstance.delete(`/messages/${messageId}`);
+      set({ messages: get().messages.map((m) => (m._id === messageId ? res.data : m)) });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to delete message");
+    }
+  },
+
+  reactToMessage: async (messageId, emoji) => {
+    try {
+      const res = await axiosInstance.post(`/messages/${messageId}/react`, { emoji });
+      set({ messages: get().messages.map((m) => (m._id === messageId ? res.data : m)) });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to react");
+    }
   },
 
   // tell the selected user whether we're currently typing
