@@ -23,7 +23,7 @@ async function makeUser(tag: string) {
   const agent = request.agent(app);
   const res = await agent
     .post("/api/auth/signup")
-    .send({ fullName: tag, email: `${tag}_${Date.now()}@test.com`, password: "secret123" });
+    .send({ fullName: tag, email: `${tag}_${Date.now()}@test.com`, password: "secret123", username: `u${Date.now()}${Math.floor(Math.random() * 100000)}` });
   return { agent, id: res.body._id as string, cookie: String(res.headers["set-cookie"]?.[0]) };
 }
 

@@ -46,6 +46,15 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
+  searchUsers: async (q) => {
+    try {
+      const res = await axiosInstance.get("/messages/users/search", { params: { q } });
+      return res.data;
+    } catch {
+      return [];
+    }
+  },
+
   getConversations: async () => {
     try {
       const res = await axiosInstance.get("/messages/conversations");
@@ -101,6 +110,7 @@ export const useChatStore = create((set, get) => ({
         : `/messages/send/${selectedUser._id}`;
       const res = await axiosInstance.post(url, messageData);
       set({ messages: [...messages, res.data], replyingTo: null });
+      get().touchConversation(res.data.conversationId); // move chat to top
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to send message");
     }
@@ -168,6 +178,7 @@ export const useChatStore = create((set, get) => ({
           isTyping: false,
           isRecordingPeer: false,
         });
+        get().touchConversation(msg.conversationId); // move chat to top
         if (!sel.isGroup) get().markMessagesRead(); // read implies delivered
       } else {
         get().bumpUnread(msg.conversationId);
@@ -225,7 +236,7 @@ export const useChatStore = create((set, get) => ({
     socket.off("messagesDelivered");
   },
 
-  // increment a conversation's unread count locally (or refetch if unknown)
+  // increment a conversation's unread count + bump its activity time
   bumpUnread: (conversationId) => {
     const convs = get().conversations;
     const idx = convs.findIndex((c) => c._id === conversationId);
@@ -234,7 +245,24 @@ export const useChatStore = create((set, get) => ({
       return;
     }
     const updated = [...convs];
-    updated[idx] = { ...updated[idx], unread: (updated[idx].unread || 0) + 1 };
+    updated[idx] = {
+      ...updated[idx],
+      unread: (updated[idx].unread || 0) + 1,
+      lastMessageAt: new Date().toISOString(),
+    };
+    set({ conversations: updated });
+  },
+
+  // move a conversation to the top of the list (new activity, no unread change)
+  touchConversation: (conversationId) => {
+    const convs = get().conversations;
+    const idx = convs.findIndex((c) => c._id === conversationId);
+    if (idx === -1) {
+      get().getConversations(); // not in the list yet (first message)
+      return;
+    }
+    const updated = [...convs];
+    updated[idx] = { ...updated[idx], lastMessageAt: new Date().toISOString() };
     set({ conversations: updated });
   },
 

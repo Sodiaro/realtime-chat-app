@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { X, Search, Ban, Users, MoreVertical, BellOff, Bell, Archive, Info } from "lucide-react";
+import { X, Search, Ban, Users, MoreVertical, BellOff, Bell, Archive, Info, UserRound } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 import { axiosInstance } from "../lib/axios";
 import { formatLastSeen, formatMessageTime } from "../lib/utils";
 import GroupInfoModal from "./GroupInfoModal";
+import UserProfileModal from "./UserProfileModal";
+import Avatar from "./Avatar";
 
 const ChatHeader = () => {
   const { selectedUser, setSelectedUser, conversations, toggleMute, toggleArchive } = useChatStore();
@@ -13,6 +15,7 @@ const ChatHeader = () => {
   const isOnline = onlineUsers.includes(selectedUser._id);
   const isBlocked = !isGroup && authUser?.blockedUsers?.some((id) => id === selectedUser._id);
   const [showGroupInfo, setShowGroupInfo] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
 
   // the conversation backing this chat (groups use their own id; DMs match by participant)
   const conv = isGroup
@@ -51,16 +54,17 @@ const ChatHeader = () => {
   return (
     <div className="p-2.5 border-b border-base-300">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="avatar">
-            <div className="size-10 rounded-full relative grid place-items-center bg-base-300">
-              {isGroup ? (
-                <Users className="size-5" />
-              ) : (
-                <img src={selectedUser.profilePic || "/avatar.png"} alt={selectedUser.fullName} />
-              )}
+        <div
+          className={`flex items-center gap-3 ${!isGroup ? "cursor-pointer" : ""}`}
+          onClick={() => !isGroup && setShowProfile(true)}
+        >
+          {isGroup ? (
+            <div className="size-10 rounded-full grid place-items-center bg-base-300">
+              <Users className="size-5" />
             </div>
-          </div>
+          ) : (
+            <Avatar user={selectedUser} size="size-10" />
+          )}
 
           <div>
             <h3 className="font-medium">
@@ -102,6 +106,13 @@ const ChatHeader = () => {
               <MoreVertical className="size-5" />
             </button>
             <ul tabIndex={0} className="dropdown-content menu bg-base-100 rounded-box shadow w-48 z-50 mt-2">
+              {!isGroup && (
+                <li>
+                  <button onClick={() => setShowProfile(true)}>
+                    <UserRound className="size-4" /> View profile
+                  </button>
+                </li>
+              )}
               {isGroup && (
                 <li>
                   <button onClick={() => setShowGroupInfo(true)}>
@@ -136,6 +147,9 @@ const ChatHeader = () => {
 
       {showGroupInfo && isGroup && (
         <GroupInfoModal conversation={selectedUser} onClose={() => setShowGroupInfo(false)} />
+      )}
+      {showProfile && !isGroup && (
+        <UserProfileModal user={selectedUser} onClose={() => setShowProfile(false)} />
       )}
 
       {searchOpen && (

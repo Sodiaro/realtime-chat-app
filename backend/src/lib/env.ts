@@ -13,6 +13,12 @@ const envSchema = z.object({
   CLOUDINARY_API_SECRET: z.string().min(1),
   CORS_ORIGIN: z.string().default("http://localhost:5173"), // comma-separated
   REDIS_URL: z.string().optional(), // set to enable multi-node scaling
+  // optional SMTP for OTP emails; without it, OTPs are logged in dev
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().optional(),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  EMAIL_FROM: z.string().default("DevChat <no-reply@devchat.local>"),
 });
 
 const rawEnv = {

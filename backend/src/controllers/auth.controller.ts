@@ -1,48 +1,135 @@
 import type { RequestHandler } from "express";
 import bcrypt from "bcryptjs";
 import { generateToken } from "../lib/utils.js";
-import User from "../models/user.model.js";
+import { env } from "../lib/env.js";
+import { sendOtpEmail } from "../lib/email.js";
+import User, { type IUser } from "../models/user.model.js";
 import Message from "../models/message.model.js";
 import Conversation from "../models/conversation.model.js";
 import cloudinary from "../lib/cloudinary.js";
 
+const publicUser = (u: IUser) => ({
+  _id: u._id,
+  fullName: u.fullName,
+  email: u.email,
+  username: u.username,
+  profilePic: u.profilePic,
+  bio: u.bio,
+  status: u.status,
+  isAdmin: u.isAdmin,
+});
+
+const genOtp = () => String(Math.floor(100000 + Math.random() * 900000));
+
 export const signup: RequestHandler = async (req, res, next) => {
-  const { fullName, email, password } = req.body;
+  const { fullName, email, password, username } = req.body;
   try {
-    if (!fullName || !email || !password) {
+    if (!fullName || !email || !password || !username) {
       res.status(400).json({ message: "All fields are required" });
       return;
     }
-
     if (password.length < 6) {
       res.status(400).json({ message: "Password must be at least 6 characters" });
       return;
     }
 
-    const user = await User.findOne({ email });
-
-    if (user) {
+    const handle = String(username).trim().toLowerCase();
+    if (!/^[a-z0-9_]{3,20}$/.test(handle)) {
+      res.status(400).json({ message: "Username must be 3-20 chars: letters, numbers, underscore" });
+      return;
+    }
+    if (await User.findOne({ email })) {
       res.status(400).json({ message: "Email already exists" });
+      return;
+    }
+    if (await User.findOne({ username: handle })) {
+      res.status(409).json({ message: "Username is already taken" });
       return;
     }
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
+    const newUser = new User({ fullName, email, username: handle, password: hashedPassword });
 
-    const newUser = new User({
-      fullName,
-      email,
-      password: hashedPassword,
-    });
+    // tests skip email verification
+    if (env.NODE_ENV === "test") {
+      newUser.isVerified = true;
+      await newUser.save();
+      generateToken(newUser._id, res, newUser.tokenVersion);
+      res.status(201).json(publicUser(newUser));
+      return;
+    }
 
+    // otherwise: send an OTP and require verification before login
+    const otp = genOtp();
+    newUser.emailOtp = await bcrypt.hash(otp, salt);
+    newUser.emailOtpExpires = new Date(Date.now() + 10 * 60 * 1000);
     await newUser.save();
-    generateToken(newUser._id, res, newUser.tokenVersion);
+    await sendOtpEmail(email, otp);
 
     res.status(201).json({
-      _id: newUser._id,
-      fullName: newUser.fullName,
-      email: newUser.email,
-      profilePic: newUser.profilePic,
+      needsVerification: true,
+      email,
+      ...(env.NODE_ENV === "development" ? { devOtp: otp } : {}),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const verifyEmail: RequestHandler = async (req, res, next) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      res.status(400).json({ message: "Email and code are required" });
+      return;
+    }
+    const user = await User.findOne({ email });
+    if (!user) {
+      res.status(400).json({ message: "Invalid request" });
+      return;
+    }
+    if (user.isVerified) {
+      generateToken(user._id, res, user.tokenVersion);
+      res.status(200).json(publicUser(user));
+      return;
+    }
+    if (!user.emailOtp || !user.emailOtpExpires || user.emailOtpExpires < new Date()) {
+      res.status(400).json({ message: "Code expired — please resend" });
+      return;
+    }
+    if (!(await bcrypt.compare(String(otp), user.emailOtp))) {
+      res.status(400).json({ message: "Invalid code" });
+      return;
+    }
+    user.isVerified = true;
+    user.emailOtp = undefined;
+    user.emailOtpExpires = undefined;
+    await user.save();
+    generateToken(user._id, res, user.tokenVersion);
+    res.status(200).json(publicUser(user));
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const resendOtp: RequestHandler = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+    if (!user || user.isVerified) {
+      res.status(200).json({ message: "If that account needs verification, a code was sent" });
+      return;
+    }
+    const otp = genOtp();
+    const salt = await bcrypt.genSalt(10);
+    user.emailOtp = await bcrypt.hash(otp, salt);
+    user.emailOtpExpires = new Date(Date.now() + 10 * 60 * 1000);
+    await user.save();
+    await sendOtpEmail(email, otp);
+    res.status(200).json({
+      message: "Code sent",
+      ...(env.NODE_ENV === "development" ? { devOtp: otp } : {}),
     });
   } catch (error) {
     next(error);
@@ -50,9 +137,12 @@ export const signup: RequestHandler = async (req, res, next) => {
 };
 
 export const login: RequestHandler = async (req, res, next) => {
-  const { email, password } = req.body;
+  const { email, password } = req.body; // "email" carries email OR username
   try {
-    const user = await User.findOne({ email });
+    const identifier = String(email || "").trim();
+    const user = await User.findOne({
+      $or: [{ email: identifier }, { username: identifier.toLowerCase() }],
+    });
 
     if (!user) {
       res.status(400).json({ message: "Invalid credentials" });
@@ -65,14 +155,17 @@ export const login: RequestHandler = async (req, res, next) => {
       return;
     }
 
-    generateToken(user._id, res, user.tokenVersion);
+    if (!user.isVerified) {
+      res.status(403).json({
+        message: "Please verify your email first",
+        needsVerification: true,
+        email: user.email,
+      });
+      return;
+    }
 
-    res.status(200).json({
-      _id: user._id,
-      fullName: user.fullName,
-      email: user.email,
-      profilePic: user.profilePic,
-    });
+    generateToken(user._id, res, user.tokenVersion);
+    res.status(200).json(publicUser(user));
   } catch (error) {
     next(error);
   }
@@ -204,6 +297,20 @@ export const deleteAccount: RequestHandler = async (req, res, next) => {
     await User.findByIdAndDelete(myId);
     res.cookie("jwt", "", { maxAge: 0 });
     res.status(200).json({ message: "Account deleted" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const checkUsername: RequestHandler = async (req, res, next) => {
+  try {
+    const handle = String(req.query.username || "").trim().toLowerCase();
+    if (!/^[a-z0-9_]{3,20}$/.test(handle)) {
+      res.status(200).json({ available: false, reason: "invalid" });
+      return;
+    }
+    const taken = await User.findOne({ username: handle });
+    res.status(200).json({ available: !taken });
   } catch (error) {
     next(error);
   }

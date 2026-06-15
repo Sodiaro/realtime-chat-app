@@ -4,6 +4,7 @@ import {
   getConversations,
   getMessages,
   getUsersForSidebar,
+  searchUsers,
   sendMessage,
   updateMessage,
   deleteMessage,
@@ -28,6 +29,7 @@ import {
 const router = express.Router();
 
 router.get("/users", protectRoute, getUsersForSidebar);
+router.get("/users/search", protectRoute, searchUsers);
 router.get("/conversations", protectRoute, getConversations);
 router.get("/search", protectRoute, searchMessages);
 router.get("/starred", protectRoute, getStarred);

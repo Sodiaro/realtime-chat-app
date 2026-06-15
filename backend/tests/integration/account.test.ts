@@ -8,6 +8,7 @@ async function makeAgent(tag: string) {
     fullName: `User ${tag}`,
     email: `user_${tag}_${Date.now()}@test.com`,
     password: "secret123",
+    username: `u${Date.now()}${Math.floor(Math.random() * 100000)}`,
   });
   const cookie = String(res.headers["set-cookie"]?.[0]).split(";")[0];
   return { agent, id: res.body._id as string, cookie };

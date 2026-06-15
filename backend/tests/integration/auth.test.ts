@@ -5,6 +5,7 @@ import { app } from "../../src/app";
 const newUser = (n = "") => ({
   fullName: `User ${n}`,
   email: `user${n}_${Date.now()}@test.com`,
+  username: `u${Date.now()}${Math.floor(Math.random() * 100000)}`,
   password: "secret123",
 });
 

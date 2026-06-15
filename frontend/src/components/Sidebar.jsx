@@ -3,7 +3,8 @@ import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
 import SidebarSkeleton from "./skeletons/SidebarSkeleton";
 import CreateGroupModal from "./CreateGroupModal";
-import { Users, UsersRound, Plus, BellOff, Archive } from "lucide-react";
+import Avatar from "./Avatar";
+import { Users, UsersRound, Plus, BellOff, Archive, Search, X } from "lucide-react";
 
 const Sidebar = () => {
   const {
@@ -13,6 +14,7 @@ const Sidebar = () => {
     getConversations,
     selectedUser,
     setSelectedUser,
+    searchUsers,
     isUsersLoading,
   } = useChatStore();
 
@@ -20,11 +22,29 @@ const Sidebar = () => {
   const [showOnlineOnly, setShowOnlineOnly] = useState(false);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
 
   useEffect(() => {
     getUsers();
     getConversations();
   }, [getUsers, getConversations]);
+
+  // debounced user search by username/name
+  useEffect(() => {
+    if (!query.trim()) {
+      setResults([]);
+      return;
+    }
+    const t = setTimeout(async () => setResults(await searchUsers(query.trim())), 350);
+    return () => clearTimeout(t);
+  }, [query, searchUsers]);
+
+  const openSearchResult = (user) => {
+    setSelectedUser(user);
+    setQuery("");
+    setResults([]);
+  };
 
   const filteredUsers = showOnlineOnly
     ? users.filter((user) => onlineUsers.includes(user._id))
@@ -84,11 +104,7 @@ const Sidebar = () => {
       }`}
     >
       <div className="relative mx-auto lg:mx-0 shrink-0">
-        <img
-          src={user.profilePic || "/avatar.png"}
-          alt={user.fullName}
-          className="size-12 object-cover rounded-full"
-        />
+        <Avatar user={user} size="size-12" />
         {onlineUsers.includes(user._id) && (
           <span className="absolute bottom-0 right-0 size-3 bg-green-500 rounded-full ring-2 ring-zinc-900" />
         )}
@@ -124,6 +140,48 @@ const Sidebar = () => {
             <Plus className="size-5" />
           </button>
         </div>
+        {/* find people by username */}
+        <div className="mt-3 hidden lg:block relative">
+          <div className="relative">
+            <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50" />
+            <input
+              className="input input-sm input-bordered w-full pl-8 pr-7"
+              placeholder="Find people by username…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            {query && (
+              <button
+                onClick={() => setQuery("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2"
+              >
+                <X className="size-4 opacity-50" />
+              </button>
+            )}
+          </div>
+          {query.trim() && (
+            <div className="absolute z-30 mt-1 w-full max-h-60 overflow-y-auto rounded-lg border border-base-300 bg-base-100 shadow">
+              {results.length === 0 ? (
+                <p className="p-3 text-sm opacity-60">No users found</p>
+              ) : (
+                results.map((u) => (
+                  <button
+                    key={u._id}
+                    onClick={() => openSearchResult(u)}
+                    className="flex items-center gap-3 w-full p-2 hover:bg-base-200 text-left"
+                  >
+                    <Avatar user={u} size="size-9" />
+                    <div className="min-w-0">
+                      <div className="font-medium truncate">{u.fullName}</div>
+                      {u.username && <div className="text-xs opacity-60 truncate">@{u.username}</div>}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+
         <div className="mt-3 hidden lg:flex items-center gap-2">
           <label className="cursor-pointer flex items-center gap-2">
             <input

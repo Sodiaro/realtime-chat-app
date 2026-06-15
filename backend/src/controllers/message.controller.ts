@@ -9,15 +9,54 @@ import { io, userRoom, getOnlineUserIds } from "../lib/socket.js";
 import { enqueueNewMessageNotification } from "../lib/queues.js";
 import { messagesSentTotal } from "../lib/metrics.js";
 
+// messages can only be edited/deleted within 10 minutes of sending
+const EDIT_WINDOW_MS = 10 * 60 * 1000;
+
+// only people the user has actually talked to (their DM contacts)
 export const getUsersForSidebar: RequestHandler = async (req, res, next) => {
   try {
-    const loggedInUserId = req.user!._id;
-    const filteredUsers = await User.find({ _id: { $ne: loggedInUserId } })
-      .select("-password")
-      .limit(100)
+    const myId = String(req.user!._id);
+    const convs = await Conversation.find({ isGroup: false, participants: myId })
+      .populate("participants", "fullName username profilePic bio status lastSeen")
       .lean();
 
-    res.status(200).json(filteredUsers);
+    const seen = new Set<string>();
+    const contacts: unknown[] = [];
+    for (const c of convs) {
+      const peer = (c.participants as { _id: Types.ObjectId }[]).find(
+        (p) => String(p._id) !== myId
+      );
+      if (peer && !seen.has(String(peer._id))) {
+        seen.add(String(peer._id));
+        contacts.push(peer);
+      }
+    }
+    res.status(200).json(contacts);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// find any user by username or name (to start a new chat)
+export const searchUsers: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = req.user!._id;
+    const q = String(req.query.q || "").trim();
+    if (!q) {
+      res.status(200).json([]);
+      return;
+    }
+    const users = await User.find({
+      _id: { $ne: myId },
+      $or: [
+        { username: { $regex: q, $options: "i" } },
+        { fullName: { $regex: q, $options: "i" } },
+      ],
+    })
+      .select("fullName username profilePic bio status lastSeen")
+      .limit(20)
+      .lean();
+    res.status(200).json(users);
   } catch (error) {
     next(error);
   }
@@ -31,7 +70,7 @@ export const getConversations: RequestHandler = async (req, res, next) => {
       .sort({ lastMessageAt: -1 })
       .limit(100)
       .populate("lastMessage")
-      .populate("participants", "-password");
+      .populate("participants", "fullName username profilePic bio status lastSeen");
 
     const result = conversations.map((c) => ({
       _id: c._id,
@@ -233,6 +272,10 @@ export const updateMessage: RequestHandler = async (req, res, next) => {
       res.status(400).json({ message: "Cannot edit a deleted message" });
       return;
     }
+    if (Date.now() - new Date(message.createdAt).getTime() > EDIT_WINDOW_MS) {
+      res.status(403).json({ message: "Messages can only be edited within 10 minutes" });
+      return;
+    }
 
     message.text = String(text).trim();
     message.editedAt = new Date();
@@ -257,6 +300,10 @@ export const deleteMessage: RequestHandler = async (req, res, next) => {
     }
     if (String(message.senderId) !== myId) {
       res.status(403).json({ message: "You can only delete your own messages" });
+      return;
+    }
+    if (Date.now() - new Date(message.createdAt).getTime() > EDIT_WINDOW_MS) {
+      res.status(403).json({ message: "Messages can only be deleted within 10 minutes" });
       return;
     }
 

@@ -17,6 +17,7 @@ async function makeUser(tag: string, fullName?: string) {
     fullName: fullName || `User ${tag}`,
     email: `user_${tag}_${Date.now()}@test.com`,
     password: "secret123",
+    username: `u${Date.now()}${Math.floor(Math.random() * 100000)}`,
   });
   return { agent, id: res.body._id as string };
 }

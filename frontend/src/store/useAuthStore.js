@@ -12,8 +12,8 @@ export const useAuthStore = create((set, get) => ({
   isUpdatingProfile: false,
   isCheckingAuth: true,
   onlineUsers: [],
-  socket:null,
- 
+  socket: null,
+  pendingEmail: null, // email awaiting OTP verification
 
   checkAuth: async () => {
     try {
@@ -33,13 +33,41 @@ export const useAuthStore = create((set, get) => ({
     set({ isSigningUp: true });
     try {
       const res = await axiosInstance.post("/auth/signup", data);
-      set({ authUser: res.data });
+      if (res.data.needsVerification) {
+        set({ pendingEmail: res.data.email });
+        if (res.data.devOtp) toast.success(`Dev code: ${res.data.devOtp}`, { duration: 8000 });
+        return;
+      }
+      set({ authUser: res.data, pendingEmail: null });
       toast.success("Account created successfully");
       get().connectSocket();
     } catch (error) {
-      toast.error(error.response.data.message);
+      toast.error(error.response?.data?.message || "Signup failed");
     } finally {
       set({ isSigningUp: false });
+    }
+  },
+
+  verifyEmail: async (email, otp) => {
+    try {
+      const res = await axiosInstance.post("/auth/verify-email", { email, otp });
+      set({ authUser: res.data, pendingEmail: null });
+      toast.success("Email verified");
+      get().connectSocket();
+      return true;
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Verification failed");
+      return false;
+    }
+  },
+
+  resendOtp: async (email) => {
+    try {
+      const res = await axiosInstance.post("/auth/resend-otp", { email });
+      if (res.data.devOtp) toast.success(`Dev code: ${res.data.devOtp}`, { duration: 8000 });
+      else toast.success("Code sent");
+    } catch {
+      toast.error("Failed to resend code");
     }
   },
 
@@ -47,12 +75,17 @@ export const useAuthStore = create((set, get) => ({
     set({ isLoggingIn: true });
     try {
       const res = await axiosInstance.post("/auth/login", data);
-      set({ authUser: res.data });
+      set({ authUser: res.data, pendingEmail: null });
       toast.success("Logged in successfully");
-
       get().connectSocket();
     } catch (error) {
-      toast.error(error.response.data.message);
+      if (error.response?.status === 403 && error.response.data?.needsVerification) {
+        set({ pendingEmail: error.response.data.email });
+        get().resendOtp(error.response.data.email);
+        toast("Please verify your email to continue");
+        return;
+      }
+      toast.error(error.response?.data?.message || "Login failed");
     } finally {
       set({ isLoggingIn: false });
     }

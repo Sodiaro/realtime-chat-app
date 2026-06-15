@@ -16,11 +16,11 @@ describe("metrics", () => {
     const a = request.agent(app);
     const ra = await a
       .post("/api/auth/signup")
-      .send({ fullName: "MA", email: `ma_${Date.now()}@test.com`, password: "secret123" });
+      .send({ fullName: "MA", email: `ma_${Date.now()}@test.com`, password: "secret123", username: `u${Date.now()}${Math.floor(Math.random() * 100000)}` });
     const b = request.agent(app);
     const rb = await b
       .post("/api/auth/signup")
-      .send({ fullName: "MB", email: `mb_${Date.now()}@test.com`, password: "secret123" });
+      .send({ fullName: "MB", email: `mb_${Date.now()}@test.com`, password: "secret123", username: `u${Date.now()}${Math.floor(Math.random() * 100000)}` });
 
     await a.post(`/api/messages/send/${rb.body._id}`).send({ text: "metric me" });
 

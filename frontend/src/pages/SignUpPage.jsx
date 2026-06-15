@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuthStore } from "../store/useAuthStore";
-import { Eye, EyeOff, Loader2, Lock, Mail, MessageSquare, User } from "lucide-react";
+import { Eye, EyeOff, Loader2, Lock, Mail, MessageSquare, User, AtSign } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import AuthImagePattern from "../components/AuthImagePattern";
+import OtpForm from "../components/OtpForm";
+import { axiosInstance } from "../lib/axios";
 import toast from "react-hot-toast";
 
 const SignUpPage = () => {
@@ -11,13 +13,36 @@ const SignUpPage = () => {
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
+    username: "",
     password: "",
   });
+  const [usernameStatus, setUsernameStatus] = useState(null); // null | "checking" | "available" | "taken" | "invalid"
 
-  const { signup, isSigningUp } = useAuthStore();
+  const { signup, isSigningUp, pendingEmail } = useAuthStore();
+
+  // debounced username availability check
+  useEffect(() => {
+    const u = formData.username.trim().toLowerCase();
+    if (!u) return setUsernameStatus(null);
+    if (!/^[a-z0-9_]{3,20}$/.test(u)) return setUsernameStatus("invalid");
+    setUsernameStatus("checking");
+    const t = setTimeout(async () => {
+      try {
+        const res = await axiosInstance.get("/auth/check-username", { params: { username: u } });
+        setUsernameStatus(res.data.available ? "available" : "taken");
+      } catch {
+        setUsernameStatus(null);
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [formData.username]);
 
   const validateForm = () => {
     if (!formData.fullName.trim()) return toast.error("Full name is required");
+    if (!formData.username.trim()) return toast.error("Username is required");
+    if (usernameStatus === "invalid")
+      return toast.error("Username must be 3-20 chars: letters, numbers, underscore");
+    if (usernameStatus === "taken") return toast.error("Username is already taken");
     if (!formData.email.trim()) return toast.error("Email is required");
     if (!/\S+@\S+\.\S+/.test(formData.email)) return toast.error("Invalid email format");
     if (!formData.password) return toast.error("Password is required");
@@ -53,6 +78,9 @@ const SignUpPage = () => {
             </div>
           </div>
 
+          {pendingEmail ? (
+            <OtpForm email={pendingEmail} />
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="form-control">
               <label className="label">
@@ -70,6 +98,38 @@ const SignUpPage = () => {
                   onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                 />
               </div>
+            </div>
+
+            <div className="form-control">
+              <label className="label">
+                <span className="label-text font-medium">Username</span>
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <AtSign className="size-5 text-base-content/40" />
+                </div>
+                <input
+                  type="text"
+                  className="input input-bordered w-full pl-10"
+                  placeholder="username"
+                  value={formData.username}
+                  onChange={(e) =>
+                    setFormData({ ...formData, username: e.target.value.replace(/\s/g, "") })
+                  }
+                />
+              </div>
+              {usernameStatus && (
+                <span
+                  className={`text-xs mt-1 ${
+                    usernameStatus === "available" ? "text-success" : "text-error"
+                  }`}
+                >
+                  {usernameStatus === "checking" && "Checking…"}
+                  {usernameStatus === "available" && "✓ Available"}
+                  {usernameStatus === "taken" && "✗ Already taken"}
+                  {usernameStatus === "invalid" && "3-20 chars: letters, numbers, underscore"}
+                </span>
+              )}
             </div>
 
             <div className="form-control">
@@ -130,6 +190,7 @@ const SignUpPage = () => {
               )}
             </button>
           </form>
+          )}
 
           <div className="text-center">
             <p className="text-base-content/60">

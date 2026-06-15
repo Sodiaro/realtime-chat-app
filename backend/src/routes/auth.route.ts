@@ -9,13 +9,19 @@ import {
   changePassword,
   logoutAllDevices,
   deleteAccount,
+  checkUsername,
+  verifyEmail,
+  resendOtp,
 } from "../controllers/auth.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
 import { authLimiter } from "../middleware/rateLimit.js";
 
 const router = express.Router();
 
+router.get("/check-username", checkUsername); // public, used during signup
 router.post("/signup", authLimiter, signup);
+router.post("/verify-email", authLimiter, verifyEmail);
+router.post("/resend-otp", authLimiter, resendOtp);
 router.post("/login", authLimiter, login);
 router.post("/logout", logout);
 router.put("/update-profile", protectRoute, updateProfile);

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Check, CheckCheck, Pencil, Trash2, SmilePlus, X, Reply, Forward, Pin, Flag, Star } from "lucide-react";
 import { useChatStore } from "../store/useChatStore";
 import { formatMessageTime } from "../lib/utils";
+import Avatar from "./Avatar";
 
 const EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
@@ -25,6 +26,8 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
   const isDeleted = Boolean(message.deletedAt);
   const mentionsMe = (message.mentions || []).some((id) => id === authUser._id);
   const starredByMe = (message.starredBy || []).some((id) => id === authUser._id);
+  // edit/delete only within 10 minutes of sending
+  const canModify = isOwn && Date.now() - new Date(message.createdAt).getTime() < 10 * 60 * 1000;
   const isGroup = selectedUser.isGroup;
   // in a group, the other messages can be from any member
   const sender = isGroup && !isOwn ? (users || []).find((u) => u._id === message.senderId) : null;
@@ -58,10 +61,13 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
 
   return (
     <div className={`chat ${isOwn ? "chat-end" : "chat-start"} group`}>
-      <div className="chat-image avatar">
-        <div className="size-10 rounded-full border">
-          <img src={avatar || "/avatar.png"} alt="profile pic" />
-        </div>
+      <div className="chat-image">
+        <Avatar
+          src={avatar}
+          name={isOwn ? authUser.fullName : isGroup ? sender?.fullName : selectedUser.fullName}
+          user={isOwn ? authUser : isGroup ? sender : selectedUser}
+          size="size-10"
+        />
       </div>
 
       <div className="chat-header mb-1 flex items-center gap-1">
@@ -151,7 +157,7 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
                 <Flag className="size-4" />
               </button>
             )}
-            {isOwn && (
+            {canModify && (
               <>
                 <button className="btn btn-ghost btn-xs btn-circle" onClick={() => { setEditText(message.text || ""); setEditing(true); }} title="Edit">
                   <Pencil className="size-4" />

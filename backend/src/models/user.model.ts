@@ -13,6 +13,9 @@ export interface IUser {
   blockedUsers: Types.ObjectId[];
   isAdmin: boolean;
   tokenVersion: number; // bump to invalidate all existing JWTs
+  isVerified: boolean;
+  emailOtp?: string; // hashed OTP
+  emailOtpExpires?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -65,6 +68,12 @@ const userSchema = new Schema<IUser>(
       type: Number,
       default: 0,
     },
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+    emailOtp: { type: String },
+    emailOtpExpires: { type: Date },
   },
   { timestamps: true }
 );
