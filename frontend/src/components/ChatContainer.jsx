@@ -19,6 +19,7 @@ const ChatContainer = () => {
     unsubscribeFromMessages,
     isTyping,
     markMessagesRead,
+    users,
   } = useChatStore();
   const { authUser } = useAuthStore();
   const messageEndRef = useRef(null);
@@ -78,6 +79,7 @@ const ChatContainer = () => {
               isOwn={message.senderId === authUser._id}
               authUser={authUser}
               selectedUser={selectedUser}
+              users={users}
             />
           </div>
         ))}

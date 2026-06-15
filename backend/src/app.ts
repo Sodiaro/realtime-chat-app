@@ -14,6 +14,7 @@ import { register, httpRequestDuration, httpRequestsTotal } from "./lib/metrics.
 import { env, corsOrigins } from "./lib/env.js";
 import authRoutes from "./routes/auth.route.js";
 import messageRoutes from "./routes/message.route.js";
+import adminRoutes from "./routes/admin.route.js";
 import { apiLimiter } from "./middleware/rateLimit.js";
 import { errorHandler } from "./middleware/error.middleware.js";
 import { app } from "./lib/socket.js";
@@ -88,6 +89,7 @@ app.get("/metrics", async (_req, res) => {
 app.use("/api", apiLimiter);
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
+app.use("/api/admin", adminRoutes);
 
 if (env.NODE_ENV === "production") {
   app.use(express.static(path.join(__dirname, "../frontend/dist")));

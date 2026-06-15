@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Search, Ban } from "lucide-react";
+import { X, Search, Ban, Users } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 import { axiosInstance } from "../lib/axios";
@@ -8,8 +8,9 @@ import { formatLastSeen, formatMessageTime } from "../lib/utils";
 const ChatHeader = () => {
   const { selectedUser, setSelectedUser } = useChatStore();
   const { onlineUsers, authUser, blockUser } = useAuthStore();
+  const isGroup = selectedUser.isGroup;
   const isOnline = onlineUsers.includes(selectedUser._id);
-  const isBlocked = authUser?.blockedUsers?.some((id) => id === selectedUser._id);
+  const isBlocked = !isGroup && authUser?.blockedUsers?.some((id) => id === selectedUser._id);
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -43,30 +44,44 @@ const ChatHeader = () => {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="avatar">
-            <div className="size-10 rounded-full relative">
-              <img src={selectedUser.profilePic || "/avatar.png"} alt={selectedUser.fullName} />
+            <div className="size-10 rounded-full relative grid place-items-center bg-base-300">
+              {isGroup ? (
+                <Users className="size-5" />
+              ) : (
+                <img src={selectedUser.profilePic || "/avatar.png"} alt={selectedUser.fullName} />
+              )}
             </div>
           </div>
 
           <div>
-            <h3 className="font-medium">{selectedUser.fullName}</h3>
+            <h3 className="font-medium">{isGroup ? selectedUser.fullName : selectedUser.fullName}</h3>
             <p className="text-sm text-base-content/70">
-              {isBlocked ? "Blocked" : isOnline ? "Online" : formatLastSeen(selectedUser.lastSeen)}
+              {isGroup
+                ? `${selectedUser.participants?.length || 0} members`
+                : isBlocked
+                  ? "Blocked"
+                  : isOnline
+                    ? "Online"
+                    : formatLastSeen(selectedUser.lastSeen)}
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-1">
-          <button onClick={() => setSearchOpen((v) => !v)} title="Search messages">
-            <Search className="size-5" />
-          </button>
-          <button
-            onClick={() => blockUser(selectedUser._id)}
-            title={isBlocked ? "Unblock user" : "Block user"}
-            className={isBlocked ? "text-error" : ""}
-          >
-            <Ban className="size-5" />
-          </button>
+          {!isGroup && (
+            <button onClick={() => setSearchOpen((v) => !v)} title="Search messages">
+              <Search className="size-5" />
+            </button>
+          )}
+          {!isGroup && (
+            <button
+              onClick={() => blockUser(selectedUser._id)}
+              title={isBlocked ? "Unblock user" : "Block user"}
+              className={isBlocked ? "text-error" : ""}
+            >
+              <Ban className="size-5" />
+            </button>
+          )}
           <button onClick={() => setSelectedUser(null)}>
             <X />
           </button>

@@ -6,7 +6,8 @@ import { useAuthStore } from "./useAuthStore";
 export const useChatStore = create((set, get) => ({
   messages: [],
   users: [],
-  selectedUser: null,
+  conversations: [], // group conversations
+  selectedUser: null, // a user (DM) or a group-shaped object { isGroup, _id, fullName }
   isUsersLoading: false,
   isMessagesLoading: false,
   isTyping: false,
@@ -25,22 +26,49 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
-  getMessages: async (userId) => {
-    set({ isMessagesLoading: true });
+  getConversations: async () => {
     try {
-      const res = await axiosInstance.get(`/messages/${userId}`);
-      // Backend now returns { messages, nextCursor } (cursor pagination).
+      const res = await axiosInstance.get("/messages/conversations");
+      set({ conversations: res.data.filter((c) => c.isGroup) });
+    } catch {
+      /* non-fatal */
+    }
+  },
+
+  createGroup: async (name, memberIds) => {
+    try {
+      const res = await axiosInstance.post("/messages/group", { name, members: memberIds });
+      set({ conversations: [res.data, ...get().conversations] });
+      toast.success("Group created");
+      return res.data;
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to create group");
+    }
+  },
+
+  getMessages: async (id) => {
+    set({ isMessagesLoading: true });
+    const { selectedUser } = get();
+    try {
+      const url = selectedUser?.isGroup
+        ? `/messages/conversation/${selectedUser._id}`
+        : `/messages/${id}`;
+      const res = await axiosInstance.get(url);
       set({ messages: res.data.messages ?? res.data });
     } catch (error) {
-      toast.error(error.response.data.message);
+      toast.error(error.response?.data?.message || "Failed to load messages");
     } finally {
       set({ isMessagesLoading: false });
     }
   },
+
   sendMessage: async (messageData) => {
     const { selectedUser, messages } = get();
     try {
-      const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, messageData);
+      const url = selectedUser.isGroup
+        ? `/messages/conversation/${selectedUser._id}`
+        : `/messages/send/${selectedUser._id}`;
+      const res = await axiosInstance.post(url, messageData);
       set({ messages: [...messages, res.data], replyingTo: null });
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to send message");
@@ -54,14 +82,22 @@ export const useChatStore = create((set, get) => ({
     const socket = useAuthStore.getState().socket;
 
     socket.on("newMessage", (newMessage) => {
-      const isMessageSentFromSelectedUser = newMessage.senderId === selectedUser._id;
-      if (!isMessageSentFromSelectedUser) return;
+      const sel = get().selectedUser;
+      const belongs = sel?.isGroup
+        ? newMessage.conversationId === sel._id
+        : newMessage.senderId === sel?._id;
+      if (!belongs) return;
 
       set({
         messages: [...get().messages, newMessage],
         isTyping: false, // a message arrived, so they've stopped typing
       });
-      get().markMessagesRead(); // we're viewing this chat, so it's read
+      if (!sel.isGroup) get().markMessagesRead(); // we're viewing this DM
+    });
+
+    // a new group we were added to
+    socket.on("conversationCreated", (conversation) => {
+      set({ conversations: [conversation, ...get().conversations] });
     });
 
     socket.on("typing", ({ from, isTyping }) => {
@@ -96,6 +132,16 @@ export const useChatStore = create((set, get) => ({
     socket.off("typing");
     socket.off("messagesRead");
     socket.off("messageUpdated");
+    socket.off("conversationCreated");
+  },
+
+  reportMessage: async (messageId, reason) => {
+    try {
+      await axiosInstance.post(`/messages/${messageId}/report`, { reason });
+      toast.success("Reported. Thanks for flagging this.");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to report");
+    }
   },
 
   editMessage: async (messageId, text) => {
@@ -151,7 +197,7 @@ export const useChatStore = create((set, get) => ({
   emitTyping: (isTyping) => {
     const { selectedUser } = get();
     const socket = useAuthStore.getState().socket;
-    if (!selectedUser || !socket) return;
+    if (!selectedUser || selectedUser.isGroup || !socket) return; // DMs only
     socket.emit("typing", { to: selectedUser._id, isTyping });
   },
 
@@ -159,7 +205,7 @@ export const useChatStore = create((set, get) => ({
   markMessagesRead: () => {
     const { selectedUser } = get();
     const socket = useAuthStore.getState().socket;
-    if (!selectedUser || !socket) return;
+    if (!selectedUser || selectedUser.isGroup || !socket) return; // DMs only
     socket.emit("markRead", { to: selectedUser._id });
   },
 

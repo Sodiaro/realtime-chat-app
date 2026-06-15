@@ -5,6 +5,8 @@ export interface IConversation {
   key: string; // sorted participant ids — dedups 1:1 conversations
   participants: Types.ObjectId[];
   isGroup: boolean;
+  name?: string; // group name
+  admins: Types.ObjectId[]; // group admins (creator by default)
   lastMessage?: Types.ObjectId;
   lastMessageAt?: Date;
   unread: Map<string, number>; // userId -> unread count
@@ -17,6 +19,8 @@ const conversationSchema = new Schema<IConversation>(
     key: { type: String, required: true, unique: true },
     participants: [{ type: Schema.Types.ObjectId, ref: "User", required: true }],
     isGroup: { type: Boolean, default: false },
+    name: { type: String },
+    admins: [{ type: Schema.Types.ObjectId, ref: "User" }],
     lastMessage: { type: Schema.Types.ObjectId, ref: "Message" },
     lastMessageAt: { type: Date },
     unread: { type: Map, of: Number, default: {} },

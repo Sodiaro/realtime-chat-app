@@ -8,6 +8,7 @@ export interface IUser {
   profilePic: string;
   lastSeen?: Date;
   blockedUsers: Types.ObjectId[];
+  isAdmin: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -38,6 +39,10 @@ const userSchema = new Schema<IUser>(
     blockedUsers: {
       type: [{ type: Schema.Types.ObjectId, ref: "User" }],
       default: [],
+    },
+    isAdmin: {
+      type: Boolean,
+      default: false,
     },
   },
   { timestamps: true }

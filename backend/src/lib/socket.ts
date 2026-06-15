@@ -9,7 +9,7 @@ import { createAdapterClients, redisEnabled } from "./redis.js";
 import { logger } from "./logger.js";
 import { socketConnectionsActive } from "./metrics.js";
 import Message, { type IMessage } from "../models/message.model.js";
-import Conversation, { getOrCreateDirect } from "../models/conversation.model.js";
+import Conversation, { getOrCreateDirect, type IConversation } from "../models/conversation.model.js";
 import User from "../models/user.model.js";
 
 interface ServerToClientEvents {
@@ -18,6 +18,7 @@ interface ServerToClientEvents {
   typing: (payload: { from: string; isTyping: boolean }) => void;
   messagesRead: (payload: { by: string; conversationId: string; readAt: string }) => void;
   messageUpdated: (message: IMessage) => void;
+  conversationCreated: (conversation: IConversation) => void;
 }
 
 interface ClientToServerEvents {

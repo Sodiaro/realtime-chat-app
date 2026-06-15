@@ -14,6 +14,7 @@ let migrated = 0;
 
 const cursor = Message.find({ conversationId: { $exists: false } }).cursor();
 for await (const msg of cursor) {
+  if (!msg.receiverId) continue; // group messages aren't 1:1; skip
   const key = directKey(String(msg.senderId), String(msg.receiverId));
   let convId = cache.get(key);
   if (!convId) {

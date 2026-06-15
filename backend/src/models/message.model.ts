@@ -9,9 +9,11 @@ export interface IMessage {
   _id: Types.ObjectId;
   conversationId: Types.ObjectId;
   senderId: Types.ObjectId;
-  receiverId: Types.ObjectId;
+  receiverId?: Types.ObjectId; // absent for group messages
   text?: string;
   image?: string;
+  audio?: string;
+  mentions: Types.ObjectId[];
   readAt?: Date;
   editedAt?: Date;
   deletedAt?: Date;
@@ -39,13 +41,19 @@ const messageSchema = new Schema<IMessage>(
     receiverId: {
       type: Schema.Types.ObjectId,
       ref: "User",
-      required: true,
     },
     text: {
       type: String,
     },
     image: {
       type: String,
+    },
+    audio: {
+      type: String,
+    },
+    mentions: {
+      type: [{ type: Schema.Types.ObjectId, ref: "User" }],
+      default: [],
     },
     readAt: {
       type: Date,

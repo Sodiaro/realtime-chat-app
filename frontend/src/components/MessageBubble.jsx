@@ -1,18 +1,42 @@
 import { useState } from "react";
-import { Check, CheckCheck, Pencil, Trash2, SmilePlus, X, Reply, Forward, Pin } from "lucide-react";
+import { Check, CheckCheck, Pencil, Trash2, SmilePlus, X, Reply, Forward, Pin, Flag } from "lucide-react";
 import { useChatStore } from "../store/useChatStore";
 import { formatMessageTime } from "../lib/utils";
 
 const EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
-const MessageBubble = ({ message, isOwn, authUser, selectedUser }) => {
-  const { editMessage, deleteMessage, reactToMessage, setReplyingTo, setForwarding, pinMessage } =
+// highlight @mentions inside message text
+const renderText = (text) =>
+  text.split(/(@\w+)/g).map((part, i) =>
+    part.startsWith("@") ? (
+      <span key={i} className="text-sky-400 font-medium">{part}</span>
+    ) : (
+      part
+    )
+  );
+
+const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
+  const { editMessage, deleteMessage, reactToMessage, setReplyingTo, setForwarding, pinMessage, reportMessage } =
     useChatStore();
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(message.text || "");
   const [showPicker, setShowPicker] = useState(false);
 
   const isDeleted = Boolean(message.deletedAt);
+  const mentionsMe = (message.mentions || []).some((id) => id === authUser._id);
+  const isGroup = selectedUser.isGroup;
+  // in a group, the other messages can be from any member
+  const sender = isGroup && !isOwn ? (users || []).find((u) => u._id === message.senderId) : null;
+  const avatar = isOwn
+    ? authUser.profilePic
+    : isGroup
+      ? sender?.profilePic
+      : selectedUser.profilePic;
+
+  const report = () => {
+    const reason = window.prompt("Why are you reporting this message?");
+    if (reason && reason.trim()) reportMessage(message._id, reason.trim());
+  };
 
   const submitEdit = async () => {
     const trimmed = editText.trim();
@@ -35,14 +59,14 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser }) => {
     <div className={`chat ${isOwn ? "chat-end" : "chat-start"} group`}>
       <div className="chat-image avatar">
         <div className="size-10 rounded-full border">
-          <img
-            src={(isOwn ? authUser.profilePic : selectedUser.profilePic) || "/avatar.png"}
-            alt="profile pic"
-          />
+          <img src={avatar || "/avatar.png"} alt="profile pic" />
         </div>
       </div>
 
       <div className="chat-header mb-1 flex items-center gap-1">
+        {isGroup && !isOwn && (
+          <span className="text-xs font-medium opacity-70">{sender?.fullName || "Member"}</span>
+        )}
         {message.pinnedAt && !isDeleted && <Pin className="size-3 text-amber-500" title="Pinned" />}
         <time className="text-xs opacity-50 ml-1">{formatMessageTime(message.createdAt)}</time>
         {message.editedAt && !isDeleted && <span className="text-xs opacity-40">(edited)</span>}
@@ -55,7 +79,7 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser }) => {
           ))}
       </div>
 
-      <div className="chat-bubble flex flex-col relative">
+      <div className={`chat-bubble flex flex-col relative ${mentionsMe && !isDeleted ? "ring-2 ring-sky-400/50" : ""}`}>
         {isDeleted ? (
           <p className="italic opacity-60">This message was deleted</p>
         ) : editing ? (
@@ -90,7 +114,10 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser }) => {
             {message.image && (
               <img src={message.image} alt="Attachment" className="sm:max-w-[200px] rounded-md mb-2" />
             )}
-            {message.text && <p>{message.text}</p>}
+            {message.audio && (
+              <audio controls src={message.audio} className="max-w-[220px] mb-1" />
+            )}
+            {message.text && <p>{renderText(message.text)}</p>}
           </>
         )}
 
@@ -112,6 +139,11 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser }) => {
             <button className="btn btn-ghost btn-xs btn-circle" onClick={() => pinMessage(message._id)} title={message.pinnedAt ? "Unpin" : "Pin"}>
               <Pin className={`size-4 ${message.pinnedAt ? "text-amber-500" : ""}`} />
             </button>
+            {!isOwn && (
+              <button className="btn btn-ghost btn-xs btn-circle" onClick={report} title="Report">
+                <Flag className="size-4" />
+              </button>
+            )}
             {isOwn && (
               <>
                 <button className="btn btn-ghost btn-xs btn-circle" onClick={() => { setEditText(message.text || ""); setEditing(true); }} title="Edit">

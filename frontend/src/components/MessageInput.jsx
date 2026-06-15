@@ -1,18 +1,49 @@
 import { useRef, useState } from "react";
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
-import { Image, Send, X, Reply } from "lucide-react";
+import { Image, Send, X, Reply, Mic, StopCircle } from "lucide-react";
 import toast from "react-hot-toast";
 
 const MessageInput = () => {
   const [text, setText] = useState("");
   const [imagePreview, setImagePreview] = useState(null);
+  const [recording, setRecording] = useState(false);
   const fileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
   const { sendMessage, emitTyping, selectedUser, replyingTo, setReplyingTo } = useChatStore();
   const { authUser } = useAuthStore();
 
-  const isBlocked = authUser?.blockedUsers?.some((id) => id === selectedUser?._id);
+  // DMs can be blocked; groups can't
+  const isBlocked =
+    !selectedUser?.isGroup && authUser?.blockedUsers?.some((id) => id === selectedUser?._id);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      chunksRef.current = [];
+      mr.ondataavailable = (e) => chunksRef.current.push(e.data);
+      mr.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const reader = new FileReader();
+        reader.onloadend = () => sendMessage({ audio: reader.result, replyTo: replyingTo?._id });
+        reader.readAsDataURL(blob);
+        stream.getTracks().forEach((t) => t.stop());
+      };
+      mr.start();
+      mediaRecorderRef.current = mr;
+      setRecording(true);
+    } catch {
+      toast.error("Microphone access denied");
+    }
+  };
+
+  const stopRecording = () => {
+    mediaRecorderRef.current?.stop();
+    setRecording(false);
+  };
 
   // emit "typing" on keystroke, auto-clear after a short idle gap
   const handleTextChange = (e) => {
@@ -136,6 +167,26 @@ const MessageInput = () => {
           >
             <Image size={20} />
           </button>
+
+          {recording ? (
+            <button
+              type="button"
+              onClick={stopRecording}
+              className="btn btn-circle btn-error animate-pulse"
+              title="Stop & send"
+            >
+              <StopCircle size={20} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={startRecording}
+              className="btn btn-circle text-zinc-400"
+              title="Record voice note"
+            >
+              <Mic size={20} />
+            </button>
+          )}
         </div>
         <button
           type="submit"

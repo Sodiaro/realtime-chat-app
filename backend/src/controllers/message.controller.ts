@@ -1,7 +1,9 @@
 import type { RequestHandler } from "express";
+import mongoose, { type Types } from "mongoose";
 import User from "../models/user.model.js";
 import Message, { type IMessage } from "../models/message.model.js";
 import Conversation, { getOrCreateDirect } from "../models/conversation.model.js";
+import Report from "../models/report.model.js";
 import cloudinary from "../lib/cloudinary.js";
 import { io, userRoom } from "../lib/socket.js";
 import { enqueueNewMessageNotification } from "../lib/queues.js";
@@ -35,6 +37,7 @@ export const getConversations: RequestHandler = async (req, res, next) => {
       _id: c._id,
       participants: c.participants,
       isGroup: c.isGroup,
+      name: c.name,
       lastMessage: c.lastMessage,
       lastMessageAt: c.lastMessageAt,
       unread: c.unread?.get(myId) ?? 0,
@@ -93,13 +96,32 @@ async function blockedBetween(aId: string, bId: string): Promise<boolean> {
   return Boolean(aBlockedB || bBlockedA);
 }
 
+// resolve @mentions in text to participant user ids (matches first name or full name)
+async function resolveMentions(
+  text: string | undefined,
+  participantIds: Types.ObjectId[]
+): Promise<Types.ObjectId[]> {
+  if (!text) return [];
+  const tokens = (text.match(/@(\w+)/g) || []).map((t) => t.slice(1).toLowerCase());
+  if (tokens.length === 0) return [];
+
+  const users = await User.find({ _id: { $in: participantIds } }).select("fullName").lean();
+  const matched: Types.ObjectId[] = [];
+  for (const u of users) {
+    const first = u.fullName.split(" ")[0]?.toLowerCase();
+    const full = u.fullName.replace(/\s+/g, "").toLowerCase();
+    if ((first && tokens.includes(first)) || tokens.includes(full)) matched.push(u._id);
+  }
+  return matched;
+}
+
 export const sendMessage: RequestHandler = async (req, res, next) => {
   try {
-    const { text, image, replyTo } = req.body;
+    const { text, image, audio, replyTo } = req.body;
     const { id: receiverId } = req.params;
     const senderId = req.user!._id;
 
-    if (!text && !image) {
+    if (!text && !image && !audio) {
       res.status(400).json({ message: "Message cannot be empty" });
       return;
     }
@@ -115,6 +137,12 @@ export const sendMessage: RequestHandler = async (req, res, next) => {
       imageUrl = uploadResponse.secure_url;
     }
 
+    let audioUrl: string | undefined;
+    if (audio) {
+      const uploadResponse = await cloudinary.uploader.upload(audio, { resource_type: "video" });
+      audioUrl = uploadResponse.secure_url;
+    }
+
     const conversation = await getOrCreateDirect(senderId, String(receiverId));
 
     const newMessage = new Message({
@@ -123,6 +151,8 @@ export const sendMessage: RequestHandler = async (req, res, next) => {
       receiverId,
       text,
       image: imageUrl,
+      audio: audioUrl,
+      mentions: await resolveMentions(text, conversation.participants),
       replyTo: replyTo || undefined,
     });
 
@@ -382,6 +412,162 @@ export const forwardMessage: RequestHandler = async (req, res, next) => {
     );
 
     io.to(userRoom(to)).emit("newMessage", newMessage);
+    res.status(201).json(newMessage);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const reportMessage: RequestHandler = async (req, res, next) => {
+  try {
+    const reporterId = req.user!._id;
+    const { messageId } = req.params;
+    const { reason } = req.body;
+
+    if (!reason || !String(reason).trim()) {
+      res.status(400).json({ message: "A reason is required" });
+      return;
+    }
+    const message = await Message.findById(messageId);
+    if (!message) {
+      res.status(404).json({ message: "Message not found" });
+      return;
+    }
+
+    await new Report({ reporterId, messageId, reason: String(reason).trim() }).save();
+    res.status(201).json({ message: "Reported. Thanks for flagging this." });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ---- group chats ----
+
+export const createGroup: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = req.user!._id;
+    const { name, members } = req.body;
+
+    if (!name || !String(name).trim()) {
+      res.status(400).json({ message: "Group name is required" });
+      return;
+    }
+    if (!Array.isArray(members) || members.length < 1) {
+      res.status(400).json({ message: "Add at least one member" });
+      return;
+    }
+
+    const participants = Array.from(new Set([String(myId), ...members.map(String)]));
+    const conversation = new Conversation({
+      key: `group:${new mongoose.Types.ObjectId().toString()}`,
+      participants,
+      isGroup: true,
+      name: String(name).trim(),
+      admins: [myId],
+    });
+    await conversation.save();
+
+    // let online members pick it up immediately
+    for (const p of participants) {
+      if (p !== String(myId)) io.to(userRoom(p)).emit("conversationCreated", conversation);
+    }
+
+    res.status(201).json(conversation);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getConversationMessages: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = req.user!._id;
+    const { conversationId } = req.params;
+
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation) {
+      res.status(404).json({ message: "Conversation not found" });
+      return;
+    }
+    if (!conversation.participants.map(String).includes(String(myId))) {
+      res.status(403).json({ message: "Not a participant" });
+      return;
+    }
+
+    const limit = Math.min(Number(req.query.limit) || 30, 100);
+    const query: Record<string, unknown> = { conversationId };
+    if (req.query.cursor) query.createdAt = { $lt: new Date(String(req.query.cursor)) };
+
+    const page = await Message.find(query)
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .populate("replyTo", "text senderId image deletedAt")
+      .lean();
+
+    const messages = page.reverse();
+    const nextCursor = page.length === limit ? messages[0]?.createdAt : null;
+
+    await Conversation.updateOne(
+      { _id: conversation._id },
+      { $set: { [`unread.${String(myId)}`]: 0 } }
+    );
+
+    res.status(200).json({ messages, nextCursor });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const sendToConversation: RequestHandler = async (req, res, next) => {
+  try {
+    const senderId = req.user!._id;
+    const { conversationId } = req.params;
+    const { text, image, audio, replyTo } = req.body;
+
+    if (!text && !image && !audio) {
+      res.status(400).json({ message: "Message cannot be empty" });
+      return;
+    }
+
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation) {
+      res.status(404).json({ message: "Conversation not found" });
+      return;
+    }
+    const participants = conversation.participants.map(String);
+    if (!participants.includes(String(senderId))) {
+      res.status(403).json({ message: "Not a participant" });
+      return;
+    }
+
+    let imageUrl: string | undefined;
+    if (image) imageUrl = (await cloudinary.uploader.upload(image)).secure_url;
+    let audioUrl: string | undefined;
+    if (audio) audioUrl = (await cloudinary.uploader.upload(audio, { resource_type: "video" })).secure_url;
+
+    const newMessage = new Message({
+      conversationId: conversation._id,
+      senderId,
+      text,
+      image: imageUrl,
+      audio: audioUrl,
+      mentions: await resolveMentions(text, conversation.participants),
+      replyTo: replyTo || undefined,
+    });
+    await newMessage.save();
+    await newMessage.populate("replyTo", "text senderId image deletedAt");
+    messagesSentTotal.inc();
+
+    const unreadInc: Record<string, number> = {};
+    for (const p of participants) if (p !== String(senderId)) unreadInc[`unread.${p}`] = 1;
+    await Conversation.updateOne(
+      { _id: conversation._id },
+      { $set: { lastMessage: newMessage._id, lastMessageAt: newMessage.createdAt }, $inc: unreadInc }
+    );
+
+    for (const p of participants) {
+      if (p !== String(senderId)) io.to(userRoom(p)).emit("newMessage", newMessage);
+    }
+
     res.status(201).json(newMessage);
   } catch (error) {
     next(error);
