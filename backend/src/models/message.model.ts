@@ -15,6 +15,9 @@ export interface IMessage {
   readAt?: Date;
   editedAt?: Date;
   deletedAt?: Date;
+  pinnedAt?: Date;
+  replyTo?: Types.ObjectId;
+  forwardedFrom?: Types.ObjectId;
   reactions: IReaction[];
   createdAt: Date;
   updatedAt: Date;
@@ -52,6 +55,17 @@ const messageSchema = new Schema<IMessage>(
     },
     deletedAt: {
       type: Date,
+    },
+    pinnedAt: {
+      type: Date,
+    },
+    replyTo: {
+      type: Schema.Types.ObjectId,
+      ref: "Message",
+    },
+    forwardedFrom: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
     },
     reactions: {
       type: [{ userId: { type: Schema.Types.ObjectId, ref: "User" }, emoji: String }],

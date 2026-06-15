@@ -83,6 +83,15 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
+  blockUser: async (userId) => {
+    try {
+      const res = await axiosInstance.post(`/auth/block/${userId}`);
+      set({ authUser: { ...get().authUser, blockedUsers: res.data.blockedUsers } });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update block");
+    }
+  },
+
    connectSocket: () => {
     const { authUser } = get();
     if (!authUser || get().socket?.connected) return;

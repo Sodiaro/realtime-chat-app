@@ -64,6 +64,7 @@ export const getMessages: RequestHandler = async (req, res, next) => {
     const page = await Message.find(query)
       .sort({ createdAt: -1 })
       .limit(limit)
+      .populate("replyTo", "text senderId image deletedAt")
       .lean();
 
     const messages = page.reverse();
@@ -81,14 +82,30 @@ export const getMessages: RequestHandler = async (req, res, next) => {
   }
 };
 
+// true if either user has blocked the other
+async function blockedBetween(aId: string, bId: string): Promise<boolean> {
+  const [a, b] = await Promise.all([
+    User.findById(aId).select("blockedUsers").lean(),
+    User.findById(bId).select("blockedUsers").lean(),
+  ]);
+  const aBlockedB = a?.blockedUsers?.some((x) => String(x) === bId);
+  const bBlockedA = b?.blockedUsers?.some((x) => String(x) === aId);
+  return Boolean(aBlockedB || bBlockedA);
+}
+
 export const sendMessage: RequestHandler = async (req, res, next) => {
   try {
-    const { text, image } = req.body;
+    const { text, image, replyTo } = req.body;
     const { id: receiverId } = req.params;
     const senderId = req.user!._id;
 
     if (!text && !image) {
       res.status(400).json({ message: "Message cannot be empty" });
+      return;
+    }
+
+    if (await blockedBetween(String(senderId), String(receiverId))) {
+      res.status(403).json({ message: "You can't message this user" });
       return;
     }
 
@@ -106,9 +123,11 @@ export const sendMessage: RequestHandler = async (req, res, next) => {
       receiverId,
       text,
       image: imageUrl,
+      replyTo: replyTo || undefined,
     });
 
     await newMessage.save();
+    await newMessage.populate("replyTo", "text senderId image deletedAt");
     messagesSentTotal.inc();
 
     // bump conversation metadata + the receiver's unread count
@@ -280,6 +299,90 @@ export const searchMessages: RequestHandler = async (req, res, next) => {
 
     const results = await Message.find(filter).sort({ createdAt: -1 }).limit(50).lean();
     res.status(200).json(results);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const pinMessage: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const { messageId } = req.params;
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      res.status(404).json({ message: "Message not found" });
+      return;
+    }
+    if (String(message.senderId) !== myId && String(message.receiverId) !== myId) {
+      res.status(403).json({ message: "Not a participant of this message" });
+      return;
+    }
+
+    // toggle pin
+    message.pinnedAt = message.pinnedAt ? undefined : new Date();
+    await message.save();
+    await message.populate("replyTo", "text senderId image deletedAt");
+
+    emitToParticipants(message.senderId, message.receiverId, message);
+    res.status(200).json(message);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const forwardMessage: RequestHandler = async (req, res, next) => {
+  try {
+    const senderId = req.user!._id;
+    const myId = String(senderId);
+    const { messageId } = req.params;
+    const { to } = req.body;
+
+    if (!to || typeof to !== "string") {
+      res.status(400).json({ message: "Recipient is required" });
+      return;
+    }
+
+    const original = await Message.findById(messageId);
+    if (!original) {
+      res.status(404).json({ message: "Message not found" });
+      return;
+    }
+    if (original.deletedAt) {
+      res.status(400).json({ message: "Cannot forward a deleted message" });
+      return;
+    }
+    if (String(original.senderId) !== myId && String(original.receiverId) !== myId) {
+      res.status(403).json({ message: "Not a participant of this message" });
+      return;
+    }
+    if (await blockedBetween(myId, to)) {
+      res.status(403).json({ message: "You can't message this user" });
+      return;
+    }
+
+    const conversation = await getOrCreateDirect(senderId, to);
+    const newMessage = new Message({
+      conversationId: conversation._id,
+      senderId,
+      receiverId: to,
+      text: original.text,
+      image: original.image,
+      forwardedFrom: original.senderId,
+    });
+    await newMessage.save();
+    messagesSentTotal.inc();
+
+    await Conversation.updateOne(
+      { _id: conversation._id },
+      {
+        $set: { lastMessage: newMessage._id, lastMessageAt: newMessage.createdAt },
+        $inc: { [`unread.${to}`]: 1 },
+      }
+    );
+
+    io.to(userRoom(to)).emit("newMessage", newMessage);
+    res.status(201).json(newMessage);
   } catch (error) {
     next(error);
   }

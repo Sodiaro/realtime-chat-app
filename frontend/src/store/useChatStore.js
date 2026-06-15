@@ -10,6 +10,8 @@ export const useChatStore = create((set, get) => ({
   isUsersLoading: false,
   isMessagesLoading: false,
   isTyping: false,
+  replyingTo: null, // message being replied to
+  forwarding: null, // message being forwarded (opens the picker)
 
   getUsers: async () => {
     set({ isUsersLoading: true });
@@ -39,9 +41,9 @@ export const useChatStore = create((set, get) => ({
     const { selectedUser, messages } = get();
     try {
       const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, messageData);
-      set({ messages: [...messages, res.data] });
+      set({ messages: [...messages, res.data], replyingTo: null });
     } catch (error) {
-      toast.error(error.response.data.message);
+      toast.error(error.response?.data?.message || "Failed to send message");
     }
   },
 
@@ -122,6 +124,28 @@ export const useChatStore = create((set, get) => ({
       toast.error(error.response?.data?.message || "Failed to react");
     }
   },
+
+  pinMessage: async (messageId) => {
+    try {
+      const res = await axiosInstance.post(`/messages/${messageId}/pin`);
+      set({ messages: get().messages.map((m) => (m._id === messageId ? res.data : m)) });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to pin");
+    }
+  },
+
+  forwardMessage: async (messageId, toUserId) => {
+    try {
+      await axiosInstance.post(`/messages/${messageId}/forward`, { to: toUserId });
+      toast.success("Message forwarded");
+      set({ forwarding: null });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to forward");
+    }
+  },
+
+  setReplyingTo: (message) => set({ replyingTo: message }),
+  setForwarding: (message) => set({ forwarding: message }),
 
   // tell the selected user whether we're currently typing
   emitTyping: (isTyping) => {

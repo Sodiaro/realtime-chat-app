@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { Check, CheckCheck, Pencil, Trash2, SmilePlus, X } from "lucide-react";
+import { Check, CheckCheck, Pencil, Trash2, SmilePlus, X, Reply, Forward, Pin } from "lucide-react";
 import { useChatStore } from "../store/useChatStore";
 import { formatMessageTime } from "../lib/utils";
 
 const EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
 const MessageBubble = ({ message, isOwn, authUser, selectedUser }) => {
-  const { editMessage, deleteMessage, reactToMessage } = useChatStore();
+  const { editMessage, deleteMessage, reactToMessage, setReplyingTo, setForwarding, pinMessage } =
+    useChatStore();
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(message.text || "");
   const [showPicker, setShowPicker] = useState(false);
@@ -42,6 +43,7 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser }) => {
       </div>
 
       <div className="chat-header mb-1 flex items-center gap-1">
+        {message.pinnedAt && !isDeleted && <Pin className="size-3 text-amber-500" title="Pinned" />}
         <time className="text-xs opacity-50 ml-1">{formatMessageTime(message.createdAt)}</time>
         {message.editedAt && !isDeleted && <span className="text-xs opacity-40">(edited)</span>}
         {isOwn &&
@@ -73,6 +75,18 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser }) => {
           </div>
         ) : (
           <>
+            {message.forwardedFrom && (
+              <p className="text-xs italic opacity-60 mb-1 flex items-center gap-1">
+                <Forward className="size-3" /> Forwarded
+              </p>
+            )}
+            {message.replyTo && (
+              <div className="mb-1 border-l-2 border-base-content/30 pl-2 text-xs opacity-70">
+                {message.replyTo.deletedAt
+                  ? "deleted message"
+                  : message.replyTo.text || "📷 Photo"}
+              </div>
+            )}
             {message.image && (
               <img src={message.image} alt="Attachment" className="sm:max-w-[200px] rounded-md mb-2" />
             )}
@@ -88,6 +102,15 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser }) => {
           >
             <button className="btn btn-ghost btn-xs btn-circle" onClick={() => setShowPicker((v) => !v)} title="React">
               <SmilePlus className="size-4" />
+            </button>
+            <button className="btn btn-ghost btn-xs btn-circle" onClick={() => setReplyingTo(message)} title="Reply">
+              <Reply className="size-4" />
+            </button>
+            <button className="btn btn-ghost btn-xs btn-circle" onClick={() => setForwarding(message)} title="Forward">
+              <Forward className="size-4" />
+            </button>
+            <button className="btn btn-ghost btn-xs btn-circle" onClick={() => pinMessage(message._id)} title={message.pinnedAt ? "Unpin" : "Pin"}>
+              <Pin className={`size-4 ${message.pinnedAt ? "text-amber-500" : ""}`} />
             </button>
             {isOwn && (
               <>

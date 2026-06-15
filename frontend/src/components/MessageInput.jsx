@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useChatStore } from "../store/useChatStore";
-import { Image, Send, X } from "lucide-react";
+import { useAuthStore } from "../store/useAuthStore";
+import { Image, Send, X, Reply } from "lucide-react";
 import toast from "react-hot-toast";
 
 const MessageInput = () => {
@@ -8,7 +9,10 @@ const MessageInput = () => {
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
-  const { sendMessage, emitTyping } = useChatStore();
+  const { sendMessage, emitTyping, selectedUser, replyingTo, setReplyingTo } = useChatStore();
+  const { authUser } = useAuthStore();
+
+  const isBlocked = authUser?.blockedUsers?.some((id) => id === selectedUser?._id);
 
   // emit "typing" on keystroke, auto-clear after a short idle gap
   const handleTextChange = (e) => {
@@ -51,6 +55,7 @@ const MessageInput = () => {
       await sendMessage({
         text: text.trim(),
         image: imagePreview,
+        replyTo: replyingTo?._id,
       });
 
       // Clear form
@@ -62,8 +67,29 @@ const MessageInput = () => {
     }
   };
 
+  if (isBlocked) {
+    return (
+      <div className="p-4 w-full text-center text-sm text-base-content/60">
+        You blocked this user. Unblock them from the chat header to send messages.
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 w-full">
+      {replyingTo && (
+        <div className="mb-2 flex items-center gap-2 rounded-lg bg-base-200 px-3 py-2">
+          <Reply className="size-4 shrink-0 opacity-60" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs opacity-60">Replying to</p>
+            <p className="text-sm truncate">{replyingTo.text || "📷 Photo"}</p>
+          </div>
+          <button type="button" onClick={() => setReplyingTo(null)}>
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
+
       {imagePreview && (
         <div className="mb-3 flex items-center gap-2">
           <div className="relative">

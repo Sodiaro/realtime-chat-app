@@ -9,6 +9,8 @@ import {
   deleteMessage,
   reactToMessage,
   searchMessages,
+  pinMessage,
+  forwardMessage,
 } from "../controllers/message.controller.js";
 
 const router = express.Router();
@@ -20,6 +22,8 @@ router.get("/:id", protectRoute, getMessages);
 
 router.post("/send/:id", protectRoute, sendMessage);
 router.post("/:messageId/react", protectRoute, reactToMessage);
+router.post("/:messageId/pin", protectRoute, pinMessage);
+router.post("/:messageId/forward", protectRoute, forwardMessage);
 router.patch("/:messageId", protectRoute, updateMessage);
 router.delete("/:messageId", protectRoute, deleteMessage);
 

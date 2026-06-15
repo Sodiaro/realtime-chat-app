@@ -115,3 +115,30 @@ export const checkAuth: RequestHandler = (req, res, next) => {
     next(error);
   }
 };
+
+export const blockUser: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const { id } = req.params;
+
+    if (id === myId) {
+      res.status(400).json({ message: "You cannot block yourself" });
+      return;
+    }
+
+    const me = await User.findById(myId);
+    if (!me) {
+      res.status(404).json({ message: "User not found" });
+      return;
+    }
+
+    const idx = me.blockedUsers.findIndex((u) => String(u) === id);
+    if (idx >= 0) me.blockedUsers.splice(idx, 1); // unblock
+    else me.blockedUsers.push(id as unknown as (typeof me.blockedUsers)[number]); // block
+    await me.save();
+
+    res.status(200).json({ blockedUsers: me.blockedUsers });
+  } catch (error) {
+    next(error);
+  }
+};

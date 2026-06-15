@@ -1,9 +1,11 @@
 import { useChatStore } from "../store/useChatStore";
 import { useEffect, useRef } from "react";
+import { Pin } from "lucide-react";
 
 import ChatHeader from "./ChatHeader";
 import MessageInput from "./MessageInput";
 import MessageBubble from "./MessageBubble";
+import ForwardModal from "./ForwardModal";
 import MessageSkeleton from "./skeletons/MessageSkeleton";
 import { useAuthStore } from "../store/useAuthStore";
 
@@ -52,9 +54,21 @@ const ChatContainer = () => {
     );
   }
 
+  const pinned = messages.filter((m) => m.pinnedAt && !m.deletedAt);
+  const latestPinned = pinned[pinned.length - 1];
+
   return (
     <div className="flex-1 flex flex-col overflow-auto">
       <ChatHeader />
+
+      {latestPinned && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 text-sm">
+          <Pin className="size-4 text-amber-500 shrink-0" />
+          <span className="flex-1 truncate">{latestPinned.text || "📷 Photo"}</span>
+        </div>
+      )}
+
+      <ForwardModal />
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((message) => (

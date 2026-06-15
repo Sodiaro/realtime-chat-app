@@ -7,6 +7,7 @@ export interface IUser {
   password: string;
   profilePic: string;
   lastSeen?: Date;
+  blockedUsers: Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -33,6 +34,10 @@ const userSchema = new Schema<IUser>(
     },
     lastSeen: {
       type: Date,
+    },
+    blockedUsers: {
+      type: [{ type: Schema.Types.ObjectId, ref: "User" }],
+      default: [],
     },
   },
   { timestamps: true }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Search } from "lucide-react";
+import { X, Search, Ban } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 import { axiosInstance } from "../lib/axios";
@@ -7,8 +7,9 @@ import { formatLastSeen, formatMessageTime } from "../lib/utils";
 
 const ChatHeader = () => {
   const { selectedUser, setSelectedUser } = useChatStore();
-  const { onlineUsers } = useAuthStore();
+  const { onlineUsers, authUser, blockUser } = useAuthStore();
   const isOnline = onlineUsers.includes(selectedUser._id);
+  const isBlocked = authUser?.blockedUsers?.some((id) => id === selectedUser._id);
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -50,7 +51,7 @@ const ChatHeader = () => {
           <div>
             <h3 className="font-medium">{selectedUser.fullName}</h3>
             <p className="text-sm text-base-content/70">
-              {isOnline ? "Online" : formatLastSeen(selectedUser.lastSeen)}
+              {isBlocked ? "Blocked" : isOnline ? "Online" : formatLastSeen(selectedUser.lastSeen)}
             </p>
           </div>
         </div>
@@ -58,6 +59,13 @@ const ChatHeader = () => {
         <div className="flex items-center gap-1">
           <button onClick={() => setSearchOpen((v) => !v)} title="Search messages">
             <Search className="size-5" />
+          </button>
+          <button
+            onClick={() => blockUser(selectedUser._id)}
+            title={isBlocked ? "Unblock user" : "Block user"}
+            className={isBlocked ? "text-error" : ""}
+          >
+            <Ban className="size-5" />
           </button>
           <button onClick={() => setSelectedUser(null)}>
             <X />
