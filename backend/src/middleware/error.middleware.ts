@@ -15,7 +15,7 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   const message = e.expose && e.message ? e.message : "Internal Server Error";
 
   if (status >= 500) {
-    console.error(`[${req.method} ${req.originalUrl}]`, err);
+    req.log.error({ err }, `${req.method} ${req.originalUrl} failed`);
   }
 
   res.status(status).json({ message });

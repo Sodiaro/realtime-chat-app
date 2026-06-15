@@ -4,9 +4,13 @@ import cors from "cors";
 import helmet from "helmet";
 import mongoose from "mongoose";
 import swaggerUi from "swagger-ui-express";
+import { pinoHttp } from "pino-http";
+import { randomUUID } from "crypto";
 import path from "path";
 
 import { openapiSpec } from "./lib/swagger.js";
+import { logger } from "./lib/logger.js";
+import { register, httpRequestDuration, httpRequestsTotal } from "./lib/metrics.js";
 import { env, corsOrigins } from "./lib/env.js";
 import authRoutes from "./routes/auth.route.js";
 import messageRoutes from "./routes/message.route.js";
@@ -15,6 +19,37 @@ import { errorHandler } from "./middleware/error.middleware.js";
 import { app } from "./lib/socket.js";
 
 const __dirname = path.resolve();
+
+// correlation id: reuse an incoming x-request-id or mint one, echo it back
+app.use((req, res, next) => {
+  const id = (req.headers["x-request-id"] as string) || randomUUID();
+  req.id = id;
+  res.setHeader("x-request-id", id);
+  next();
+});
+
+// structured request logging, tagged with the correlation id
+app.use(
+  pinoHttp({
+    logger,
+    genReqId: (req) => req.id as string,
+    autoLogging: {
+      ignore: (req) => ["/health", "/ready", "/metrics"].includes(req.url || ""),
+    },
+  })
+);
+
+// record latency + count for every request, labelled by matched route
+app.use((req, res, next) => {
+  const end = httpRequestDuration.startTimer();
+  res.on("finish", () => {
+    const route = req.route?.path ? `${req.baseUrl}${req.route.path}` : req.path;
+    const labels = { method: req.method, route, status_code: String(res.statusCode) };
+    end(labels);
+    httpRequestsTotal.inc(labels);
+  });
+  next();
+});
 
 app.use(helmet());
 app.use(express.json({ limit: "2mb" }));
@@ -42,6 +77,12 @@ app.get("/health", (_req, res) => res.status(200).json({ status: "ok" }));
 app.get("/ready", (_req, res) => {
   const ready = mongoose.connection.readyState === 1;
   res.status(ready ? 200 : 503).json({ ready });
+});
+
+// Prometheus scrape target. In prod, restrict this to the monitoring network.
+app.get("/metrics", async (_req, res) => {
+  res.set("Content-Type", register.contentType);
+  res.end(await register.metrics());
 });
 
 app.use("/api", apiLimiter);

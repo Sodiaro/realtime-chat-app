@@ -4,6 +4,8 @@ import Message from "../models/message.model.js";
 import Conversation, { getOrCreateDirect } from "../models/conversation.model.js";
 import cloudinary from "../lib/cloudinary.js";
 import { io, userRoom } from "../lib/socket.js";
+import { enqueueNewMessageNotification } from "../lib/queues.js";
+import { messagesSentTotal } from "../lib/metrics.js";
 
 export const getUsersForSidebar: RequestHandler = async (req, res, next) => {
   try {
@@ -107,6 +109,7 @@ export const sendMessage: RequestHandler = async (req, res, next) => {
     });
 
     await newMessage.save();
+    messagesSentTotal.inc();
 
     // bump conversation metadata + the receiver's unread count
     await Conversation.updateOne(
@@ -119,6 +122,14 @@ export const sendMessage: RequestHandler = async (req, res, next) => {
 
     // room delivery reaches all of the receiver's devices, on any node
     io.to(userRoom(String(receiverId))).emit("newMessage", newMessage);
+
+    // hand off side-effects (push/email) to the background worker
+    await enqueueNewMessageNotification({
+      messageId: String(newMessage._id),
+      conversationId: String(conversation._id),
+      senderId: String(senderId),
+      receiverId: String(receiverId),
+    });
 
     res.status(201).json(newMessage);
   } catch (error) {

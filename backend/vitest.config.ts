@@ -5,13 +5,13 @@ export default defineConfig({
     environment: "node",
     globals: true,
     setupFiles: ["./tests/setup.ts"],
-    fileParallelism: false, // shared in-memory Mongo + single mongoose connection
-    hookTimeout: 60000, // first run downloads the mongodb-memory-server binary
+    fileParallelism: false,
+    hookTimeout: 60000,
     testTimeout: 20000,
     env: {
       NODE_ENV: "test",
       JWT_SECRET: "test-secret-at-least-16-characters",
-      MONGODB_URI: "mongodb://127.0.0.1/devchat-test", // placeholder; tests use in-memory
+      MONGODB_URI: "mongodb://127.0.0.1/devchat-test",
       CLOUDINARY_CLOUD_NAME: "test",
       CLOUDINARY_API_KEY: "test",
       CLOUDINARY_API_SECRET: "test",
