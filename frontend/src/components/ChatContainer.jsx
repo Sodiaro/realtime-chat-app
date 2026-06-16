@@ -6,6 +6,7 @@ import ChatHeader from "./ChatHeader";
 import MessageInput from "./MessageInput";
 import MessageBubble from "./MessageBubble";
 import ForwardModal from "./ForwardModal";
+import Avatar from "./Avatar";
 import MessageSkeleton from "./skeletons/MessageSkeleton";
 import { useAuthStore } from "../store/useAuthStore";
 
@@ -24,8 +25,10 @@ const ChatContainer = () => {
   } = useChatStore();
   const { authUser } = useAuthStore();
   const messageEndRef = useRef(null);
+  const prevCountRef = useRef(0);
 
   useEffect(() => {
+    prevCountRef.current = 0; // reset so the first load scrolls to bottom
     getMessages(selectedUser._id);
 
     subscribeToMessages();
@@ -40,8 +43,12 @@ const ChatContainer = () => {
     markMessagesRead,
   ]);
 
+  // only scroll on a NEW message (or typing) — not on edits/reactions/reads,
+  // which would otherwise jump the view to the bottom and feel like a "resend"
   useEffect(() => {
-    if (messageEndRef.current && messages) {
+    const grew = messages.length > prevCountRef.current;
+    prevCountRef.current = messages.length;
+    if ((grew || isTyping || isRecordingPeer) && messageEndRef.current) {
       messageEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages, isTyping, isRecordingPeer]);
@@ -72,8 +79,10 @@ const ChatContainer = () => {
 
       <ForwardModal />
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((message) => (
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-base-200/40">
+        {Object.values(
+          messages.reduce((acc, m) => ({ ...acc, [m._id]: m }), {})
+        ).map((message) => (
           <div key={message._id} ref={messageEndRef}>
             <MessageBubble
               message={message}
@@ -87,12 +96,10 @@ const ChatContainer = () => {
 
         {isTyping && (
           <div className="chat chat-start" ref={messageEndRef}>
-            <div className="chat-image avatar">
-              <div className="size-10 rounded-full border">
-                <img src={selectedUser.profilePic || "/avatar.png"} alt="profile pic" />
-              </div>
+            <div className="chat-image">
+              <Avatar user={selectedUser} size="size-10" />
             </div>
-            <div className="chat-bubble bg-base-200 flex items-center gap-1 py-3">
+            <div className="chat-bubble rounded-2xl !bg-base-100 ring-1 ring-base-300/60 shadow-sm flex items-center gap-1 py-3">
               <span className="size-2 rounded-full bg-base-content/40 animate-bounce [animation-delay:-0.3s]" />
               <span className="size-2 rounded-full bg-base-content/40 animate-bounce [animation-delay:-0.15s]" />
               <span className="size-2 rounded-full bg-base-content/40 animate-bounce" />
@@ -102,12 +109,10 @@ const ChatContainer = () => {
 
         {isRecordingPeer && (
           <div className="chat chat-start" ref={messageEndRef}>
-            <div className="chat-image avatar">
-              <div className="size-10 rounded-full border">
-                <img src={selectedUser.profilePic || "/avatar.png"} alt="profile pic" />
-              </div>
+            <div className="chat-image">
+              <Avatar user={selectedUser} size="size-10" />
             </div>
-            <div className="chat-bubble bg-base-200 flex items-center gap-2 text-sm text-base-content/70">
+            <div className="chat-bubble rounded-2xl !bg-base-100 ring-1 ring-base-300/60 shadow-sm flex items-center gap-2 text-sm text-base-content/70">
               <Mic className="size-4 text-red-500 animate-pulse" />
               recording a voice note…
             </div>

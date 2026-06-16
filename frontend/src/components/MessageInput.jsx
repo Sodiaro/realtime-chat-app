@@ -192,11 +192,11 @@ const MessageInput = () => {
         </div>
       ) : (
         <form onSubmit={handleSendMessage} className="flex items-center gap-2">
-          <div className="flex-1 flex gap-2">
+          <div className="flex-1 flex items-center gap-1 bg-base-200 rounded-full pl-4 pr-1.5 py-1">
             <input
               type="text"
-              className="w-full input input-bordered rounded-lg input-sm sm:input-md"
-              placeholder="Type a message..."
+              className="flex-1 bg-transparent outline-none text-sm py-2 min-w-0"
+              placeholder="Write your message…"
               value={text}
               onChange={handleTextChange}
               onBlur={stopTyping}
@@ -208,30 +208,29 @@ const MessageInput = () => {
               ref={fileInputRef}
               onChange={handleImageChange}
             />
-
             <button
               type="button"
-              className={`hidden sm:flex btn btn-circle ${imagePreview ? "text-emerald-500" : "text-zinc-400"}`}
+              className={`btn btn-ghost btn-sm btn-circle ${imagePreview ? "text-primary" : "text-base-content/50"}`}
               onClick={() => fileInputRef.current?.click()}
+              title="Attach image"
             >
-              <Image size={20} />
+              <Image size={18} />
             </button>
-
             <button
               type="button"
               onClick={startRecording}
-              className="btn btn-circle text-zinc-400"
+              className="btn btn-ghost btn-sm btn-circle text-base-content/50"
               title="Record voice note"
             >
-              <Mic size={20} />
+              <Mic size={18} />
             </button>
           </div>
           <button
             type="submit"
-            className="btn btn-sm btn-circle"
+            className="btn btn-primary btn-circle"
             disabled={!text.trim() && !imagePreview}
           >
-            <Send size={22} />
+            <Send size={20} />
           </button>
         </form>
       )}

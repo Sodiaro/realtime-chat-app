@@ -23,6 +23,7 @@ export interface IMessage {
   forwardedFrom?: Types.ObjectId;
   reactions: IReaction[];
   starredBy: Types.ObjectId[];
+  expiresAt?: Date; // disappearing messages
   createdAt: Date;
   updatedAt: Date;
 }
@@ -88,11 +89,14 @@ const messageSchema = new Schema<IMessage>(
       type: [{ type: Schema.Types.ObjectId, ref: "User" }],
       default: [],
     },
+    expiresAt: { type: Date },
   },
   { timestamps: true }
 );
 
 messageSchema.index({ conversationId: 1, createdAt: -1 });
+// TTL: Mongo auto-deletes expired (disappearing) messages
+messageSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 const Message = mongoose.model<IMessage>("Message", messageSchema);
 export default Message;

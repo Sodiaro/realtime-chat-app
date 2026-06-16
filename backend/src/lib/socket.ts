@@ -22,6 +22,11 @@ interface ServerToClientEvents {
   messageUpdated: (message: IMessage) => void;
   conversationCreated: (conversation: IConversation) => void;
   conversationUpdated: (conversation: IConversation) => void;
+  "call:incoming": (p: { from: string; fromName?: string; fromPic?: string; offer: unknown; video: boolean }) => void;
+  "call:answered": (p: { from: string; answer: unknown }) => void;
+  "call:ice": (p: { from: string; candidate: unknown }) => void;
+  "call:end": (p: { from: string }) => void;
+  "call:reject": (p: { from: string }) => void;
 }
 
 interface ClientToServerEvents {
@@ -29,6 +34,11 @@ interface ClientToServerEvents {
   recording: (payload: { to: string; isRecording: boolean }) => void;
   markRead: (payload: { to: string }) => void;
   markDelivered: (payload: { to: string }) => void;
+  "call:offer": (p: { to: string; offer: unknown; video: boolean; fromName?: string; fromPic?: string }) => void;
+  "call:answer": (p: { to: string; answer: unknown }) => void;
+  "call:ice": (p: { to: string; candidate: unknown }) => void;
+  "call:end": (p: { to: string }) => void;
+  "call:reject": (p: { to: string }) => void;
 }
 
 const app = express();
@@ -121,6 +131,24 @@ io.on("connection", async (socket) => {
     );
     if (result.modifiedCount === 0) return;
     io.to(userRoom(to)).emit("messagesDelivered", { by: userId, conversationId: String(conv._id) });
+  });
+
+  // ---- WebRTC call signaling (relay only) ----
+  socket.on("call:offer", ({ to, offer, video, fromName, fromPic }) => {
+    if (typeof to !== "string") return;
+    io.to(userRoom(to)).emit("call:incoming", { from: userId, fromName, fromPic, offer, video });
+  });
+  socket.on("call:answer", ({ to, answer }) => {
+    if (typeof to === "string") io.to(userRoom(to)).emit("call:answered", { from: userId, answer });
+  });
+  socket.on("call:ice", ({ to, candidate }) => {
+    if (typeof to === "string") io.to(userRoom(to)).emit("call:ice", { from: userId, candidate });
+  });
+  socket.on("call:end", ({ to }) => {
+    if (typeof to === "string") io.to(userRoom(to)).emit("call:end", { from: userId });
+  });
+  socket.on("call:reject", ({ to }) => {
+    if (typeof to === "string") io.to(userRoom(to)).emit("call:reject", { from: userId });
   });
 
   socket.on("disconnect", async () => {

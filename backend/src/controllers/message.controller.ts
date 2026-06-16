@@ -7,10 +7,22 @@ import Report from "../models/report.model.js";
 import cloudinary from "../lib/cloudinary.js";
 import { io, userRoom, getOnlineUserIds } from "../lib/socket.js";
 import { enqueueNewMessageNotification } from "../lib/queues.js";
+import { sendPush } from "../lib/push.js";
 import { messagesSentTotal } from "../lib/metrics.js";
+
+const messagePreview = (m: { text?: string; image?: string; audio?: string }) =>
+  m.text || (m.image ? "📷 Photo" : m.audio ? "🎤 Voice note" : "New message");
 
 // messages can only be edited/deleted within 10 minutes of sending
 const EDIT_WINDOW_MS = 10 * 60 * 1000;
+
+// exclude disappearing messages that have already expired (TTL deletes lag ~60s)
+const notExpired = () => ({
+  $or: [{ expiresAt: { $exists: false } }, { expiresAt: { $gt: new Date() } }],
+});
+
+const computeExpiry = (minutes?: number) =>
+  minutes && minutes > 0 ? new Date(Date.now() + minutes * 60_000) : undefined;
 
 // only people the user has actually talked to (their DM contacts)
 export const getUsersForSidebar: RequestHandler = async (req, res, next) => {
@@ -84,6 +96,7 @@ export const getConversations: RequestHandler = async (req, res, next) => {
       isMuted: c.mutedBy?.some((id) => String(id) === myId) ?? false,
       isArchived: c.archivedBy?.some((id) => String(id) === myId) ?? false,
       isAdmin: c.admins?.some((id) => String(id) === myId) ?? false,
+      disappearMinutes: c.disappearMinutes ?? 0,
     }));
 
     res.status(200).json(result);
@@ -101,7 +114,7 @@ export const getMessages: RequestHandler = async (req, res, next) => {
 
     // pass ?cursor=<createdAt> to page back through older messages
     const limit = Math.min(Number(req.query.limit) || 30, 100);
-    const query: Record<string, unknown> = { conversationId: conversation._id };
+    const query: Record<string, unknown> = { conversationId: conversation._id, ...notExpired() };
     if (req.query.cursor) {
       query.createdAt = { $lt: new Date(String(req.query.cursor)) };
     }
@@ -205,6 +218,7 @@ export const sendMessage: RequestHandler = async (req, res, next) => {
       audio: audioUrl,
       mentions: await resolveMentions(text, conversation.participants),
       deliveredAt,
+      expiresAt: computeExpiry(conversation.disappearMinutes),
       replyTo: replyTo || undefined,
     });
 
@@ -232,6 +246,14 @@ export const sendMessage: RequestHandler = async (req, res, next) => {
       receiverId: String(receiverId),
     });
 
+    // web push to the recipient if they're offline (no live socket)
+    if (!online.includes(String(receiverId))) {
+      sendPush([String(receiverId)], {
+        title: req.user!.fullName,
+        body: messagePreview({ text, image: imageUrl, audio: audioUrl }),
+      }).catch(() => {});
+    }
+
     res.status(201).json(newMessage);
   } catch (error) {
     next(error);
@@ -239,13 +261,14 @@ export const sendMessage: RequestHandler = async (req, res, next) => {
 };
 
 // push a message update to both participants (all their devices, any node)
-function emitToParticipants(
-  senderId: unknown,
-  receiverId: unknown,
-  message: IMessage
-) {
-  io.to(userRoom(String(senderId))).emit("messageUpdated", message);
-  io.to(userRoom(String(receiverId))).emit("messageUpdated", message);
+// broadcast a message change to every participant (works for groups + DMs)
+async function emitMessageUpdate(message: IMessage) {
+  const conv = await Conversation.findById(message.conversationId).select("participants").lean();
+  const participants = conv?.participants?.map(String) ?? [
+    String(message.senderId),
+    String(message.receiverId),
+  ];
+  for (const p of participants) io.to(userRoom(p)).emit("messageUpdated", message);
 }
 
 export const updateMessage: RequestHandler = async (req, res, next) => {
@@ -281,7 +304,7 @@ export const updateMessage: RequestHandler = async (req, res, next) => {
     message.editedAt = new Date();
     await message.save();
 
-    emitToParticipants(message.senderId, message.receiverId, message);
+    await emitMessageUpdate(message);
     res.status(200).json(message);
   } catch (error) {
     next(error);
@@ -314,7 +337,7 @@ export const deleteMessage: RequestHandler = async (req, res, next) => {
     message.reactions = [];
     await message.save();
 
-    emitToParticipants(message.senderId, message.receiverId, message);
+    await emitMessageUpdate(message);
     res.status(200).json(message);
   } catch (error) {
     next(error);
@@ -358,7 +381,7 @@ export const reactToMessage: RequestHandler = async (req, res, next) => {
     message.reactions = reactions;
     await message.save();
 
-    emitToParticipants(message.senderId, message.receiverId, message);
+    await emitMessageUpdate(message);
     res.status(200).json(message);
   } catch (error) {
     next(error);
@@ -414,7 +437,7 @@ export const pinMessage: RequestHandler = async (req, res, next) => {
     await message.save();
     await message.populate("replyTo", "text senderId image deletedAt");
 
-    emitToParticipants(message.senderId, message.receiverId, message);
+    await emitMessageUpdate(message);
     res.status(200).json(message);
   } catch (error) {
     next(error);
@@ -554,7 +577,7 @@ export const getConversationMessages: RequestHandler = async (req, res, next) =>
     }
 
     const limit = Math.min(Number(req.query.limit) || 30, 100);
-    const query: Record<string, unknown> = { conversationId };
+    const query: Record<string, unknown> = { conversationId, ...notExpired() };
     if (req.query.cursor) query.createdAt = { $lt: new Date(String(req.query.cursor)) };
 
     const page = await Message.find(query)
@@ -614,6 +637,7 @@ export const sendToConversation: RequestHandler = async (req, res, next) => {
       image: imageUrl,
       audio: audioUrl,
       mentions: await resolveMentions(text, conversation.participants),
+      expiresAt: computeExpiry(conversation.disappearMinutes),
       replyTo: replyTo || undefined,
     });
     await newMessage.save();
@@ -627,8 +651,17 @@ export const sendToConversation: RequestHandler = async (req, res, next) => {
       { $set: { lastMessage: newMessage._id, lastMessageAt: newMessage.createdAt }, $inc: unreadInc }
     );
 
+    const online = await getOnlineUserIds();
     for (const p of participants) {
       if (p !== String(senderId)) io.to(userRoom(p)).emit("newMessage", newMessage);
+    }
+
+    const offline = participants.filter((p) => p !== String(senderId) && !online.includes(p));
+    if (offline.length) {
+      sendPush(offline, {
+        title: `${req.user!.fullName}${conversation.name ? " · " + conversation.name : ""}`,
+        body: messagePreview({ text, image: imageUrl, audio: audioUrl }),
+      }).catch(() => {});
     }
 
     res.status(201).json(newMessage);
@@ -683,6 +716,26 @@ export const toggleArchive: RequestHandler = async (req, res, next) => {
       archived ? { $pull: { archivedBy: myId } } : { $addToSet: { archivedBy: myId } }
     );
     res.status(200).json({ isArchived: !archived });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const setDisappearing: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const { conversationId } = req.params;
+    const minutes = Number(req.body.minutes) || 0;
+
+    const conv = await Conversation.findById(conversationId);
+    if (!conv) return void res.status(404).json({ message: "Conversation not found" });
+    if (!conv.participants.map(String).includes(myId))
+      return void res.status(403).json({ message: "Not a participant" });
+
+    conv.disappearMinutes = minutes > 0 ? minutes : undefined;
+    await conv.save();
+    await emitConversationUpdated(conv._id);
+    res.status(200).json({ disappearMinutes: conv.disappearMinutes ?? 0 });
   } catch (error) {
     next(error);
   }

@@ -89,7 +89,11 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
           ))}
       </div>
 
-      <div className={`chat-bubble flex flex-col relative ${mentionsMe && !isDeleted ? "ring-2 ring-sky-400/50" : ""}`}>
+      <div
+        className={`chat-bubble rounded-2xl flex flex-col relative !text-base-content ${
+          isOwn ? "!bg-base-200" : "!bg-base-100 ring-1 ring-base-300/60 shadow-sm"
+        } ${mentionsMe && !isDeleted ? "!ring-2 !ring-primary/50" : ""}`}
+      >
         {isDeleted ? (
           <p className="italic opacity-60">This message was deleted</p>
         ) : editing ? (

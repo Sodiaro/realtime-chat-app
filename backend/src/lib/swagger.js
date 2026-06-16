@@ -13,7 +13,8 @@ export const openapiSpec = {
     version: "1.0.0",
     description:
       "Real-time messaging API. Auth is a JWT in an httpOnly `jwt` cookie, set on signup/login. " +
-      "Most realtime behaviour (delivery, typing, presence, read/delivered receipts, edits) happens over Socket.IO.",
+      "Most realtime behaviour (delivery, typing, presence, read/delivered receipts, edits) happens over Socket.IO. " +
+      "WebRTC voice/video calls are signalled over Socket.IO too (events: call:offer/answer/ice/end/reject) — not REST.",
   },
   servers: [{ url: "/", description: "current host" }],
   tags: [
@@ -23,6 +24,7 @@ export const openapiSpec = {
     { name: "Messages" },
     { name: "Conversations" },
     { name: "Moderation" },
+    { name: "Push" },
     { name: "System" },
   ],
   components: {
@@ -62,6 +64,7 @@ export const openapiSpec = {
           forwardedFrom: { ...ID, nullable: true },
           reactions: arrayOf("Reaction"),
           starredBy: { type: "array", items: ID },
+          expiresAt: { type: "string", format: "date-time", nullable: true, description: "disappearing messages" },
           deliveredAt: { type: "string", format: "date-time", nullable: true },
           readAt: { type: "string", format: "date-time", nullable: true },
           editedAt: { type: "string", format: "date-time", nullable: true },
@@ -91,6 +94,7 @@ export const openapiSpec = {
           isMuted: { type: "boolean" },
           isArchived: { type: "boolean" },
           isAdmin: { type: "boolean" },
+          disappearMinutes: { type: "integer", description: "0 = off" },
         },
       },
       Report: {
@@ -468,6 +472,23 @@ export const openapiSpec = {
         responses: { 200: ok("Archive state", { type: "object", properties: { isArchived: { type: "boolean" } } }) },
       },
     },
+    "/api/messages/conversation/{conversationId}/disappearing": {
+      post: {
+        tags: ["Conversations"],
+        summary: "Set disappearing-messages timer (0 = off)",
+        security: auth,
+        parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: json({
+            type: "object",
+            required: ["minutes"],
+            properties: { minutes: { type: "integer", description: "minutes until messages expire; 0 disables" } },
+          }),
+        },
+        responses: { 200: ok("Updated", { type: "object", properties: { disappearMinutes: { type: "integer" } } }) },
+      },
+    },
     "/api/messages/conversation/{conversationId}/members": {
       post: {
         tags: ["Conversations"],
@@ -517,6 +538,51 @@ export const openapiSpec = {
         parameters: [{ name: "reportId", in: "path", required: true, schema: { type: "string" } }],
         requestBody: { required: true, content: json({ type: "object", required: ["status"], properties: { status: { type: "string", enum: ["resolved", "dismissed"] } } }) },
         responses: { 200: ok("Updated report", ref("Report")), 403: ok("Admin only") },
+      },
+    },
+    // ---------- Push ----------
+    "/api/push/public-key": {
+      get: {
+        tags: ["Push"],
+        summary: "VAPID public key for web-push subscription (null if push disabled)",
+        responses: { 200: ok("Key", { type: "object", properties: { key: { type: "string", nullable: true } } }) },
+      },
+    },
+    "/api/push/subscribe": {
+      post: {
+        tags: ["Push"],
+        summary: "Register this device's push subscription",
+        security: auth,
+        requestBody: {
+          required: true,
+          content: json({
+            type: "object",
+            required: ["subscription"],
+            properties: {
+              subscription: {
+                type: "object",
+                description: "browser PushSubscription JSON",
+                properties: {
+                  endpoint: { type: "string" },
+                  keys: { type: "object", properties: { p256dh: { type: "string" }, auth: { type: "string" } } },
+                },
+              },
+            },
+          }),
+        },
+        responses: { 201: ok("Subscribed"), 400: ok("Invalid subscription", ref("Error")) },
+      },
+    },
+    "/api/push/unsubscribe": {
+      post: {
+        tags: ["Push"],
+        summary: "Remove a push subscription",
+        security: auth,
+        requestBody: {
+          required: true,
+          content: json({ type: "object", properties: { endpoint: { type: "string" } } }),
+        },
+        responses: { 200: ok("Unsubscribed") },
       },
     },
     // ---------- System ----------

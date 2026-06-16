@@ -12,7 +12,10 @@ import StarredPage from "./pages/StarredPage";
 
 import { useAuthStore } from "./store/useAuthStore";
 import { useChatStore } from "./store/useChatStore";
+import { useCallStore } from "./store/useCallStore";
 import { useThemeStore} from "./store/useThemeStore";
+import { registerPush } from "./lib/push";
+import CallOverlay from "./components/CallOverlay";
 import { useEffect } from "react";
 import { Loader } from "lucide-react";
 import { Toaster } from "react-hot-toast";
@@ -20,6 +23,7 @@ import { Toaster } from "react-hot-toast";
 const App = () => {
   const { authUser, checkAuth, isCheckingAuth, socket } = useAuthStore();
   const { subscribeSocket, unsubscribeSocket, conversations } = useChatStore();
+  const { subscribeCall, unsubscribeCall } = useCallStore();
   const { theme } = useThemeStore();
 
   // total unread across non-archived conversations → browser tab title
@@ -39,13 +43,22 @@ const App = () => {
   useEffect(() => {
     if (!socket) return;
     subscribeSocket();
-    return () => unsubscribeSocket();
-  }, [socket, subscribeSocket, unsubscribeSocket]);
+    subscribeCall();
+    return () => {
+      unsubscribeSocket();
+      unsubscribeCall();
+    };
+  }, [socket, subscribeSocket, unsubscribeSocket, subscribeCall, unsubscribeCall]);
 
-  // ask for notification permission once logged in
+  // ask for notification permission + register web push once logged in
   useEffect(() => {
-    if (authUser && "Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
+    if (!authUser || !("Notification" in window)) return;
+    if (Notification.permission === "granted") {
+      registerPush();
+    } else if (Notification.permission === "default") {
+      Notification.requestPermission().then((p) => {
+        if (p === "granted") registerPush();
+      });
     }
   }, [authUser]);
 
@@ -71,6 +84,7 @@ const App = () => {
         <Route path="/starred" element={authUser ? <StarredPage /> : <Navigate to="/login" />} />
       </Routes>
 
+      <CallOverlay />
       <Toaster />
     </div>
   );

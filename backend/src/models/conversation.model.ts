@@ -12,6 +12,7 @@ export interface IConversation {
   unread: Map<string, number>; // userId -> unread count
   mutedBy: Types.ObjectId[];
   archivedBy: Types.ObjectId[];
+  disappearMinutes?: number; // 0/undefined = off
   createdAt: Date;
   updatedAt: Date;
 }
@@ -28,6 +29,7 @@ const conversationSchema = new Schema<IConversation>(
     unread: { type: Map, of: Number, default: {} },
     mutedBy: [{ type: Schema.Types.ObjectId, ref: "User" }],
     archivedBy: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    disappearMinutes: { type: Number },
   },
   { timestamps: true }
 );

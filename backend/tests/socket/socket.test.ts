@@ -127,6 +127,41 @@ describe("socket", () => {
     expect(page.messages.at(-1).readAt).toBeTruthy();
   });
 
+  it("broadcasts group message edits to all members", async () => {
+    const a = await makeUser("gbcA");
+    const b = await makeUser("gbcB");
+    const c = await makeUser("gbcC");
+    const grp = await a.agent.post("/api/messages/group").send({ name: "G", members: [b.id, c.id] });
+    const cid = grp.body._id;
+
+    const sockB: Socket = connect(b.cookie);
+    const sockC: Socket = connect(c.cookie);
+    await Promise.all([
+      new Promise<void>((r) => sockB.on("connect", () => r())),
+      new Promise<void>((r) => sockC.on("connect", () => r())),
+    ]);
+
+    const sent = await a.agent.post(`/api/messages/conversation/${cid}`).send({ text: "hi" });
+
+    const wait = (sock: Socket) =>
+      new Promise<IMessage>((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error("no messageUpdated")), 5000);
+        sock.on("messageUpdated", (m: IMessage) => {
+          clearTimeout(t);
+          resolve(m);
+        });
+      });
+    const gotB = wait(sockB);
+    const gotC = wait(sockC);
+
+    await a.agent.patch(`/api/messages/${sent.body._id}`).send({ text: "edited" });
+    const [mb, mc] = await Promise.all([gotB, gotC]);
+    sockB.close();
+    sockC.close();
+    expect(mb.text).toBe("edited");
+    expect(mc.text).toBe("edited");
+  });
+
   it("marks a message delivered when the recipient is online", async () => {
     const a = await makeUser("delA");
     const b = await makeUser("delB");

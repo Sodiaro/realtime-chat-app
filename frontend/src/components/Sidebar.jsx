@@ -77,14 +77,14 @@ const Sidebar = () => {
     <button
       key={c._id}
       onClick={() => setSelectedUser({ ...c, fullName: c.name })}
-      className={`w-full p-3 flex items-center gap-3 hover:bg-base-300 transition-colors ${
-        selectedUser?._id === c._id ? "bg-base-300 ring-1 ring-base-300" : ""
+      className={`w-full p-3 flex items-center gap-3 hover:bg-base-200 transition-colors ${
+        selectedUser?._id === c._id ? "bg-primary/10" : ""
       }`}
     >
-      <div className="size-12 rounded-full bg-base-300 grid place-items-center mx-auto lg:mx-0 shrink-0">
+      <div className="size-12 rounded-full bg-base-300 grid place-items-center shrink-0">
         <UsersRound className="size-6" />
       </div>
-      <div className="hidden lg:flex items-center w-full text-left min-w-0 gap-1">
+      <div className="flex items-center w-full text-left min-w-0 gap-1">
         <div className="min-w-0">
           <div className="font-medium truncate">{c.name}</div>
           <div className="text-sm text-zinc-400">{c.participants?.length || 0} members</div>
@@ -99,17 +99,17 @@ const Sidebar = () => {
     <button
       key={user._id}
       onClick={() => setSelectedUser(user)}
-      className={`w-full p-3 flex items-center gap-3 hover:bg-base-300 transition-colors ${
-        selectedUser?._id === user._id ? "bg-base-300 ring-1 ring-base-300" : ""
+      className={`w-full p-3 flex items-center gap-3 hover:bg-base-200 transition-colors ${
+        selectedUser?._id === user._id ? "bg-primary/10" : ""
       }`}
     >
-      <div className="relative mx-auto lg:mx-0 shrink-0">
+      <div className="relative shrink-0">
         <Avatar user={user} size="size-12" />
         {onlineUsers.includes(user._id) && (
-          <span className="absolute bottom-0 right-0 size-3 bg-green-500 rounded-full ring-2 ring-zinc-900" />
+          <span className="absolute bottom-0 right-0 size-3 bg-green-500 rounded-full ring-2 ring-base-100" />
         )}
       </div>
-      <div className="hidden lg:flex items-center w-full text-left min-w-0 gap-1">
+      <div className="flex items-center w-full text-left min-w-0 gap-1">
         <div className="min-w-0">
           <div className="font-medium truncate">{user.fullName}</div>
           <div className="text-sm text-zinc-400">
@@ -125,12 +125,12 @@ const Sidebar = () => {
   if (isUsersLoading) return <SidebarSkeleton />;
 
   return (
-    <aside className="h-full w-20 lg:w-72 border-r border-base-300 flex flex-col transition-all duration-200">
+    <aside className="h-full w-full md:w-72 lg:w-80 flex flex-col">
       <div className="border-b border-base-300 w-full p-5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Users className="size-6" />
-            <span className="font-medium hidden lg:block">Contacts</span>
+            <span className="font-medium block">Contacts</span>
           </div>
           <button
             onClick={() => setShowGroupModal(true)}
@@ -141,7 +141,7 @@ const Sidebar = () => {
           </button>
         </div>
         {/* find people by username */}
-        <div className="mt-3 hidden lg:block relative">
+        <div className="mt-3 block relative">
           <div className="relative">
             <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50" />
             <input
@@ -182,7 +182,7 @@ const Sidebar = () => {
           )}
         </div>
 
-        <div className="mt-3 hidden lg:flex items-center gap-2">
+        <div className="mt-3 flex items-center gap-2">
           <label className="cursor-pointer flex items-center gap-2">
             <input
               type="checkbox"
@@ -199,9 +199,9 @@ const Sidebar = () => {
       <div className="overflow-y-auto w-full py-3">
         {activeGroups.length > 0 && (
           <div className="pb-1">
-            <p className="px-3 pb-1 text-xs uppercase opacity-50 hidden lg:block">Groups</p>
+            <p className="px-3 pb-1 text-xs uppercase opacity-50 block">Groups</p>
             {activeGroups.map(GroupRow)}
-            <p className="px-3 pt-2 pb-1 text-xs uppercase opacity-50 hidden lg:block">Direct</p>
+            <p className="px-3 pt-2 pb-1 text-xs uppercase opacity-50 block">Direct</p>
           </div>
         )}
 
@@ -213,7 +213,7 @@ const Sidebar = () => {
           <div className="mt-2 border-t border-base-300 pt-2">
             <button
               onClick={() => setShowArchived((v) => !v)}
-              className="w-full px-3 py-2 flex items-center gap-2 text-sm opacity-70 hover:bg-base-300"
+              className="w-full px-3 py-2 flex items-center gap-2 text-sm opacity-70 hover:bg-base-200"
             >
               <Archive className="size-4" />
               <span className="hidden lg:inline">Archived ({archivedCount})</span>

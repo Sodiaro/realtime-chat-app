@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { X, Search, Ban, Users, MoreVertical, BellOff, Bell, Archive, Info, UserRound } from "lucide-react";
+import { X, Search, Ban, Users, MoreVertical, BellOff, Bell, Archive, Info, UserRound, Timer, Phone, Video } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
+import { useCallStore } from "../store/useCallStore";
 import { axiosInstance } from "../lib/axios";
 import { formatLastSeen, formatMessageTime } from "../lib/utils";
 import GroupInfoModal from "./GroupInfoModal";
@@ -9,13 +10,15 @@ import UserProfileModal from "./UserProfileModal";
 import Avatar from "./Avatar";
 
 const ChatHeader = () => {
-  const { selectedUser, setSelectedUser, conversations, toggleMute, toggleArchive } = useChatStore();
+  const { selectedUser, setSelectedUser, conversations, toggleMute, toggleArchive, setDisappearing } =
+    useChatStore();
   const { onlineUsers, authUser, blockUser } = useAuthStore();
   const isGroup = selectedUser.isGroup;
   const isOnline = onlineUsers.includes(selectedUser._id);
   const isBlocked = !isGroup && authUser?.blockedUsers?.some((id) => id === selectedUser._id);
   const [showGroupInfo, setShowGroupInfo] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const { startCall } = useCallStore();
 
   // the conversation backing this chat (groups use their own id; DMs match by participant)
   const conv = isGroup
@@ -87,6 +90,16 @@ const ChatHeader = () => {
 
         <div className="flex items-center gap-1">
           {!isGroup && (
+            <>
+              <button onClick={() => startCall(selectedUser, false)} title="Voice call">
+                <Phone className="size-5" />
+              </button>
+              <button onClick={() => startCall(selectedUser, true)} title="Video call">
+                <Video className="size-5" />
+              </button>
+            </>
+          )}
+          {!isGroup && (
             <button onClick={() => setSearchOpen((v) => !v)} title="Search messages">
               <Search className="size-5" />
             </button>
@@ -135,6 +148,25 @@ const ChatHeader = () => {
                     {conv.isArchived ? "Unarchive" : "Archive"}
                   </button>
                 </li>
+              )}
+              {conv && (
+                <>
+                  <li className="menu-title text-xs flex-row items-center gap-1 pt-1">
+                    <Timer className="size-3.5" /> Disappearing
+                  </li>
+                  {[
+                    { l: "Off", m: 0 },
+                    { l: "1 day", m: 1440 },
+                    { l: "1 week", m: 10080 },
+                  ].map((o) => (
+                    <li key={o.m}>
+                      <button onClick={() => setDisappearing(conv._id, o.m)}>
+                        {o.l}
+                        {(conv.disappearMinutes || 0) === o.m && <span className="ml-auto">✓</span>}
+                      </button>
+                    </li>
+                  ))}
+                </>
               )}
             </ul>
           </div>

@@ -18,6 +18,7 @@ import {
   sendToConversation,
   toggleMute,
   toggleArchive,
+  setDisappearing,
   starMessage,
   getStarred,
   renameGroup,
@@ -41,6 +42,7 @@ router.post("/conversation/:conversationId", protectRoute, sendToConversation);
 router.patch("/conversation/:conversationId", protectRoute, renameGroup);
 router.post("/conversation/:conversationId/mute", protectRoute, toggleMute);
 router.post("/conversation/:conversationId/archive", protectRoute, toggleArchive);
+router.post("/conversation/:conversationId/disappearing", protectRoute, setDisappearing);
 router.post("/conversation/:conversationId/members", protectRoute, addGroupMembers);
 router.delete("/conversation/:conversationId/members/:userId", protectRoute, removeGroupMember);
 router.post("/conversation/:conversationId/leave", protectRoute, leaveGroup);

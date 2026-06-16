@@ -3,6 +3,13 @@ import toast from "react-hot-toast";
 import { axiosInstance } from "../lib/axios";
 import { useAuthStore } from "./useAuthStore";
 
+// append a message, or replace it if one with the same id already exists
+// (guards against any double-delivery so a message can never duplicate)
+const upsert = (list, msg) =>
+  list.some((m) => m._id === msg._id)
+    ? list.map((m) => (m._id === msg._id ? msg : m))
+    : [...list, msg];
+
 // short notification beep (best-effort; browsers may block without a gesture)
 const playDing = () => {
   try {
@@ -109,7 +116,7 @@ export const useChatStore = create((set, get) => ({
         ? `/messages/conversation/${selectedUser._id}`
         : `/messages/send/${selectedUser._id}`;
       const res = await axiosInstance.post(url, messageData);
-      set({ messages: [...messages, res.data], replyingTo: null });
+      set({ messages: upsert(messages, res.data), replyingTo: null });
       get().touchConversation(res.data.conversationId); // move chat to top
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to send message");
@@ -121,6 +128,11 @@ export const useChatStore = create((set, get) => ({
     if (!selectedUser) return;
 
     const socket = useAuthStore.getState().socket;
+    // ensure single registration (StrictMode / re-open can double these)
+    socket.off("recording");
+    socket.off("typing");
+    socket.off("messagesRead");
+    socket.off("messageUpdated");
 
     socket.on("recording", ({ from, isRecording }) => {
       if (from !== get().selectedUser?._id) return;
@@ -165,6 +177,11 @@ export const useChatStore = create((set, get) => ({
   subscribeSocket: () => {
     const socket = useAuthStore.getState().socket;
     if (!socket) return;
+    // ensure single registration (effects can run twice in dev StrictMode)
+    socket.off("newMessage");
+    socket.off("conversationCreated");
+    socket.off("conversationUpdated");
+    socket.off("messagesDelivered");
 
     socket.on("newMessage", (msg) => {
       const sel = get().selectedUser;
@@ -174,7 +191,7 @@ export const useChatStore = create((set, get) => ({
 
       if (isOpen) {
         set({
-          messages: [...get().messages, msg],
+          messages: upsert(get().messages, msg),
           isTyping: false,
           isRecordingPeer: false,
         });
@@ -196,17 +213,19 @@ export const useChatStore = create((set, get) => ({
       const myId = useAuthStore.getState().authUser?._id;
       const amIn = conv.participants?.some((p) => (p._id || p) === myId);
       set((state) => {
+        const merge = {
+          name: conv.name,
+          participants: conv.participants,
+          admins: conv.admins,
+          disappearMinutes: conv.disappearMinutes ?? 0,
+        };
         const conversations = amIn
-          ? state.conversations.map((c) =>
-              c._id === conv._id
-                ? { ...c, name: conv.name, participants: conv.participants, admins: conv.admins }
-                : c
-            )
+          ? state.conversations.map((c) => (c._id === conv._id ? { ...c, ...merge } : c))
           : state.conversations.filter((c) => c._id !== conv._id);
         let selectedUser = state.selectedUser;
         if (selectedUser?._id === conv._id) {
           selectedUser = amIn
-            ? { ...selectedUser, fullName: conv.name, name: conv.name, participants: conv.participants, admins: conv.admins }
+            ? { ...selectedUser, ...merge, fullName: conv.name }
             : null;
         }
         return { conversations, selectedUser };
@@ -384,6 +403,15 @@ export const useChatStore = create((set, get) => ({
       toast.success(res.data.isArchived ? "Archived" : "Unarchived");
     } catch {
       toast.error("Failed to archive");
+    }
+  },
+
+  setDisappearing: async (conversationId, minutes) => {
+    try {
+      await axiosInstance.post(`/messages/conversation/${conversationId}/disappearing`, { minutes });
+      toast.success(minutes > 0 ? "Disappearing messages on" : "Disappearing messages off");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed");
     }
   },
 

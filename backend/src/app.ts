@@ -15,6 +15,7 @@ import { env, corsOrigins } from "./lib/env.js";
 import authRoutes from "./routes/auth.route.js";
 import messageRoutes from "./routes/message.route.js";
 import adminRoutes from "./routes/admin.route.js";
+import pushRoutes from "./routes/push.route.js";
 import { apiLimiter } from "./middleware/rateLimit.js";
 import { errorHandler } from "./middleware/error.middleware.js";
 import { app } from "./lib/socket.js";
@@ -90,6 +91,7 @@ app.use("/api", apiLimiter);
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/push", pushRoutes);
 
 if (env.NODE_ENV === "production") {
   app.use(express.static(path.join(__dirname, "../frontend/dist")));
