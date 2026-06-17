@@ -9,6 +9,7 @@ import SettingsPage from "./pages/SettingsPage";
 import ProfilePage from "./pages/ProfilePage";
 import AdminPage from "./pages/AdminPage";
 import StarredPage from "./pages/StarredPage";
+import CallsPage from "./pages/CallsPage";
 
 import { useAuthStore } from "./store/useAuthStore";
 import { useChatStore } from "./store/useChatStore";
@@ -16,6 +17,8 @@ import { useCallStore } from "./store/useCallStore";
 import { useThemeStore} from "./store/useThemeStore";
 import { registerPush } from "./lib/push";
 import CallOverlay from "./components/CallOverlay";
+import StatusViewer from "./components/StatusViewer";
+import CreateStatusModal from "./components/CreateStatusModal";
 import { useEffect } from "react";
 import { Loader } from "lucide-react";
 import { Toaster } from "react-hot-toast";
@@ -82,9 +85,12 @@ const App = () => {
         <Route path="/profile" element={authUser ? <ProfilePage /> : <Navigate to="/login" />} />
         <Route path="/admin" element={authUser ? <AdminPage /> : <Navigate to="/login" />} />
         <Route path="/starred" element={authUser ? <StarredPage /> : <Navigate to="/login" />} />
+        <Route path="/calls" element={authUser ? <CallsPage /> : <Navigate to="/login" />} />
       </Routes>
 
       <CallOverlay />
+      <StatusViewer />
+      <CreateStatusModal />
       <Toaster />
     </div>
   );

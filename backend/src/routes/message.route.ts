@@ -20,6 +20,7 @@ import {
   toggleArchive,
   setDisappearing,
   starMessage,
+  votePoll,
   getStarred,
   renameGroup,
   addGroupMembers,
@@ -55,6 +56,7 @@ router.post("/:messageId/pin", protectRoute, pinMessage);
 router.post("/:messageId/forward", protectRoute, forwardMessage);
 router.post("/:messageId/report", protectRoute, reportMessage);
 router.post("/:messageId/star", protectRoute, starMessage);
+router.post("/:messageId/vote", protectRoute, votePoll);
 router.patch("/:messageId", protectRoute, updateMessage);
 router.delete("/:messageId", protectRoute, deleteMessage);
 

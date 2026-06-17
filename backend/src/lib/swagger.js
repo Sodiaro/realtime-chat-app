@@ -25,6 +25,8 @@ export const openapiSpec = {
     { name: "Conversations" },
     { name: "Moderation" },
     { name: "Push" },
+    { name: "Calls" },
+    { name: "Status" },
     { name: "System" },
   ],
   components: {
@@ -59,6 +61,25 @@ export const openapiSpec = {
           text: { type: "string", nullable: true },
           image: { type: "string", nullable: true },
           audio: { type: "string", nullable: true, description: "mp3 url" },
+          file: {
+            type: "object",
+            nullable: true,
+            properties: { url: { type: "string" }, name: { type: "string" }, size: { type: "integer" }, type: { type: "string" } },
+          },
+          linkPreview: {
+            type: "object",
+            nullable: true,
+            properties: { url: { type: "string" }, title: { type: "string" }, description: { type: "string" }, image: { type: "string" } },
+          },
+          poll: {
+            type: "object",
+            nullable: true,
+            properties: {
+              question: { type: "string" },
+              multiple: { type: "boolean" },
+              options: { type: "array", items: { type: "object", properties: { text: { type: "string" }, votes: { type: "array", items: ID } } } },
+            },
+          },
           mentions: { type: "array", items: ID },
           replyTo: { oneOf: [ID, ref("Message")], nullable: true },
           forwardedFrom: { ...ID, nullable: true },
@@ -105,6 +126,42 @@ export const openapiSpec = {
           messageId: ref("Message"),
           reason: { type: "string" },
           status: { type: "string", enum: ["open", "resolved", "dismissed"] },
+          createdAt: { type: "string", format: "date-time" },
+        },
+      },
+      Call: {
+        type: "object",
+        properties: {
+          _id: ID,
+          callerId: ref("User"),
+          calleeId: ref("User"),
+          type: { type: "string", enum: ["audio", "video"] },
+          status: { type: "string", enum: ["answered", "missed", "rejected"] },
+          durationSec: { type: "integer" },
+          createdAt: { type: "string", format: "date-time" },
+        },
+      },
+      Status: {
+        type: "object",
+        properties: {
+          _id: ID,
+          userId: ID,
+          type: { type: "string", enum: ["text", "image"] },
+          text: { type: "string", nullable: true },
+          image: { type: "string", nullable: true },
+          bgColor: { type: "string", nullable: true },
+          views: {
+            type: "array",
+            description: "Who viewed this status (owner-only; empty on others' statuses)",
+            items: {
+              type: "object",
+              properties: {
+                user: ref("User"),
+                viewedAt: { type: "string", format: "date-time" },
+              },
+            },
+          },
+          expiresAt: { type: "string", format: "date-time" },
           createdAt: { type: "string", format: "date-time" },
         },
       },
@@ -538,6 +595,95 @@ export const openapiSpec = {
         parameters: [{ name: "reportId", in: "path", required: true, schema: { type: "string" } }],
         requestBody: { required: true, content: json({ type: "object", required: ["status"], properties: { status: { type: "string", enum: ["resolved", "dismissed"] } } }) },
         responses: { 200: ok("Updated report", ref("Report")), 403: ok("Admin only") },
+      },
+    },
+    "/api/messages/{messageId}/vote": {
+      post: {
+        tags: ["Messages"],
+        summary: "Vote on a poll option (toggles your vote)",
+        security: auth,
+        parameters: [{ name: "messageId", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: { required: true, content: json({ type: "object", required: ["optionIndex"], properties: { optionIndex: { type: "integer" } } }) },
+        responses: { 200: ok("Updated message", ref("Message")), 404: ok("Poll not found", ref("Error")) },
+      },
+    },
+    // ---------- Calls ----------
+    "/api/calls": {
+      get: {
+        tags: ["Calls"],
+        summary: "Your call history (as caller or callee)",
+        security: auth,
+        responses: { 200: ok("Calls", arrayOf("Call")) },
+      },
+      post: {
+        tags: ["Calls"],
+        summary: "Log a completed call (caller records it)",
+        security: auth,
+        requestBody: {
+          required: true,
+          content: json({
+            type: "object",
+            required: ["calleeId", "type"],
+            properties: {
+              calleeId: { type: "string" },
+              type: { type: "string", enum: ["audio", "video"] },
+              status: { type: "string", enum: ["answered", "missed", "rejected"] },
+              durationSec: { type: "integer" },
+            },
+          }),
+        },
+        responses: { 201: ok("Logged", ref("Call")) },
+      },
+    },
+    // ---------- Status / Stories ----------
+    "/api/status": {
+      get: {
+        tags: ["Status"],
+        summary: "Active statuses from you + your contacts, grouped by user",
+        security: auth,
+        responses: {
+          200: ok("Status groups", {
+            type: "array",
+            items: { type: "object", properties: { user: ref("User"), statuses: arrayOf("Status"), hasUnviewed: { type: "boolean" } } },
+          }),
+        },
+      },
+      post: {
+        tags: ["Status"],
+        summary: "Post a status (auto-expires after 24h)",
+        security: auth,
+        requestBody: {
+          required: true,
+          content: json({
+            type: "object",
+            required: ["type"],
+            properties: {
+              type: { type: "string", enum: ["text", "image"] },
+              text: { type: "string" },
+              image: { type: "string", description: "base64 data URL" },
+              bgColor: { type: "string" },
+            },
+          }),
+        },
+        responses: { 201: ok("Created", ref("Status")) },
+      },
+    },
+    "/api/status/{id}/view": {
+      post: {
+        tags: ["Status"],
+        summary: "Mark a status as viewed",
+        security: auth,
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: ok("Viewed") },
+      },
+    },
+    "/api/status/{id}": {
+      delete: {
+        tags: ["Status"],
+        summary: "Delete your own status",
+        security: auth,
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: ok("Deleted") },
       },
     },
     // ---------- Push ----------

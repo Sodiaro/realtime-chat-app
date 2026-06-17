@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import toast from "react-hot-toast";
 import { useAuthStore } from "./useAuthStore";
+import { axiosInstance } from "../lib/axios";
+import { startRingtone, stopRingtone } from "../lib/ringtone";
 
 const ICE = {
   iceServers: [
@@ -14,6 +16,9 @@ let pc = null;
 let localStream = null;
 let pendingCandidates = [];
 let pendingOffer = null;
+let isCaller = false;
+let connectedAt = null;
+let wasRejected = false;
 
 const sock = () => useAuthStore.getState().socket;
 
@@ -48,6 +53,10 @@ export const useCallStore = create((set, get) => ({
   startCall: async (user, video) => {
     if (get().callState !== "idle") return;
     const me = useAuthStore.getState().authUser;
+    isCaller = true;
+    connectedAt = null;
+    wasRejected = false;
+    startRingtone(); // ringback while waiting
     try {
       set({
         callState: "calling",
@@ -75,6 +84,8 @@ export const useCallStore = create((set, get) => ({
   acceptCall: async () => {
     const { peer, isVideo } = get();
     if (!peer || !pendingOffer) return;
+    isCaller = false;
+    stopRingtone();
     try {
       await get()._setupPeer(peer.id, isVideo);
       await pc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
@@ -90,6 +101,7 @@ export const useCallStore = create((set, get) => ({
       await pc.setLocalDescription(answer);
       sock()?.emit("call:answer", { to: peer.id, answer });
       pendingOffer = null;
+      connectedAt = Date.now();
       set({ callState: "connected" });
     } catch {
       toast.error("Couldn't answer call");
@@ -124,6 +136,22 @@ export const useCallStore = create((set, get) => ({
   },
 
   _cleanup: () => {
+    stopRingtone();
+    // the caller logs the call to history (covers both parties)
+    const { peer, isVideo } = get();
+    if (isCaller && peer) {
+      axiosInstance
+        .post("/calls", {
+          calleeId: peer.id,
+          type: isVideo ? "video" : "audio",
+          status: wasRejected ? "rejected" : connectedAt ? "answered" : "missed",
+          durationSec: connectedAt ? Math.round((Date.now() - connectedAt) / 1000) : 0,
+        })
+        .catch(() => {});
+    }
+    isCaller = false;
+    connectedAt = null;
+    wasRejected = false;
     if (pc) {
       pc.onicecandidate = null;
       pc.ontrack = null;
@@ -159,11 +187,14 @@ export const useCallStore = create((set, get) => ({
         return;
       }
       pendingOffer = offer;
+      startRingtone(); // ring on incoming
       set({ callState: "incoming", peer: { id: from, name: fromName, pic: fromPic }, isVideo: video });
     });
 
     s.on("call:answered", async ({ answer }) => {
       if (!pc) return;
+      stopRingtone();
+      connectedAt = Date.now();
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(answer));
         for (const c of pendingCandidates) {
@@ -198,6 +229,7 @@ export const useCallStore = create((set, get) => ({
       get()._cleanup();
     });
     s.on("call:reject", () => {
+      wasRejected = true;
       toast("Call declined");
       get()._cleanup();
     });

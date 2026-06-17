@@ -1,10 +1,13 @@
 import { useState } from "react";
-import { Check, CheckCheck, Pencil, Trash2, SmilePlus, X, Reply, Forward, Pin, Flag, Star } from "lucide-react";
+import { Check, CheckCheck, Pencil, Trash2, SmilePlus, X, Reply, Forward, Pin, Flag, Star, FileText, Download } from "lucide-react";
 import { useChatStore } from "../store/useChatStore";
 import { formatMessageTime } from "../lib/utils";
 import Avatar from "./Avatar";
 
 const EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+
+const formatSize = (b) =>
+  b < 1024 ? `${b} B` : b < 1048576 ? `${Math.round(b / 1024)} KB` : `${(b / 1048576).toFixed(1)} MB`;
 
 // highlight @mentions inside message text
 const renderText = (text) =>
@@ -17,7 +20,7 @@ const renderText = (text) =>
   );
 
 const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
-  const { editMessage, deleteMessage, reactToMessage, setReplyingTo, setForwarding, pinMessage, reportMessage, starMessage } =
+  const { editMessage, deleteMessage, reactToMessage, setReplyingTo, setForwarding, pinMessage, reportMessage, starMessage, votePoll } =
     useChatStore();
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(message.text || "");
@@ -131,7 +134,74 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
             {message.audio && (
               <audio controls src={message.audio} className="max-w-[220px] mb-1" />
             )}
+            {message.file && (
+              <a
+                href={message.file.url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-3 p-2 rounded-lg bg-base-200/60 hover:bg-base-200 mb-1 max-w-[240px]"
+              >
+                <div className="size-10 rounded-lg bg-primary/15 text-primary grid place-items-center shrink-0">
+                  <FileText className="size-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm truncate">{message.file.name}</div>
+                  <div className="text-xs opacity-60">{formatSize(message.file.size)}</div>
+                </div>
+                <Download className="size-4 opacity-60 shrink-0" />
+              </a>
+            )}
+            {message.poll && (
+              <div className="min-w-[220px] mb-1">
+                <p className="font-medium mb-2">{message.poll.question}</p>
+                {message.poll.options.map((o, i) => {
+                  const total = message.poll.options.reduce((s, x) => s + x.votes.length, 0);
+                  const mine = o.votes.some((v) => v === authUser._id);
+                  const pct = total ? Math.round((o.votes.length / total) * 100) : 0;
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => votePoll(message._id, i)}
+                      className="block w-full text-left mb-1.5 relative rounded-lg overflow-hidden border border-base-300/60"
+                    >
+                      <div className="absolute inset-0 bg-primary/15" style={{ width: `${pct}%` }} />
+                      <div className="relative flex justify-between gap-2 px-2 py-1.5 text-sm">
+                        <span className={mine ? "font-medium" : ""}>
+                          {mine ? "● " : ""}
+                          {o.text}
+                        </span>
+                        <span className="opacity-60">{o.votes.length}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+                <p className="text-xs opacity-50">
+                  {message.poll.options.reduce((s, x) => s + x.votes.length, 0)} votes
+                  {message.poll.multiple ? " · multiple choice" : ""}
+                </p>
+              </div>
+            )}
             {message.text && <p>{renderText(message.text)}</p>}
+            {message.linkPreview && (
+              <a
+                href={message.linkPreview.url}
+                target="_blank"
+                rel="noreferrer"
+                className="block mt-1 rounded-lg overflow-hidden border border-base-300/60 max-w-[260px] hover:bg-base-200/50"
+              >
+                {message.linkPreview.image && (
+                  <img src={message.linkPreview.image} alt="" className="w-full h-28 object-cover" />
+                )}
+                <div className="p-2">
+                  {message.linkPreview.title && (
+                    <div className="text-sm font-medium line-clamp-1">{message.linkPreview.title}</div>
+                  )}
+                  {message.linkPreview.description && (
+                    <div className="text-xs opacity-60 line-clamp-2">{message.linkPreview.description}</div>
+                  )}
+                </div>
+              </a>
+            )}
           </>
         )}
 

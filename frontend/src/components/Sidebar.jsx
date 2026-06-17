@@ -3,6 +3,7 @@ import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
 import SidebarSkeleton from "./skeletons/SidebarSkeleton";
 import CreateGroupModal from "./CreateGroupModal";
+import StatusBar from "./StatusBar";
 import Avatar from "./Avatar";
 import { Users, UsersRound, Plus, BellOff, Archive, Search, X } from "lucide-react";
 
@@ -196,7 +197,9 @@ const Sidebar = () => {
         </div>
       </div>
 
-      <div className="overflow-y-auto w-full py-3">
+      <StatusBar />
+
+      <div className="overflow-y-auto w-full py-3 flex-1">
         {activeGroups.length > 0 && (
           <div className="pb-1">
             <p className="px-3 pb-1 text-xs uppercase opacity-50 block">Groups</p>

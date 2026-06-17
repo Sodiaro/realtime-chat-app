@@ -5,6 +5,31 @@ export interface IReaction {
   emoji: string;
 }
 
+export interface IFile {
+  url: string;
+  name: string;
+  size: number;
+  type: string;
+}
+
+export interface ILinkPreview {
+  url: string;
+  title?: string;
+  description?: string;
+  image?: string;
+}
+
+export interface IPollOption {
+  text: string;
+  votes: Types.ObjectId[];
+}
+
+export interface IPoll {
+  question: string;
+  options: IPollOption[];
+  multiple: boolean;
+}
+
 export interface IMessage {
   _id: Types.ObjectId;
   conversationId: Types.ObjectId;
@@ -13,6 +38,9 @@ export interface IMessage {
   text?: string;
   image?: string;
   audio?: string;
+  file?: IFile;
+  linkPreview?: ILinkPreview;
+  poll?: IPoll;
   mentions: Types.ObjectId[];
   deliveredAt?: Date;
   readAt?: Date;
@@ -27,6 +55,23 @@ export interface IMessage {
   createdAt: Date;
   updatedAt: Date;
 }
+
+const fileSchema = new Schema<IFile>(
+  { url: String, name: String, size: Number, type: String },
+  { _id: false }
+);
+const linkPreviewSchema = new Schema<ILinkPreview>(
+  { url: String, title: String, description: String, image: String },
+  { _id: false }
+);
+const pollSchema = new Schema<IPoll>(
+  {
+    question: String,
+    options: [{ text: String, votes: [{ type: Schema.Types.ObjectId, ref: "User" }] }],
+    multiple: Boolean,
+  },
+  { _id: false }
+);
 
 const messageSchema = new Schema<IMessage>(
   {
@@ -54,6 +99,9 @@ const messageSchema = new Schema<IMessage>(
     audio: {
       type: String,
     },
+    file: fileSchema,
+    linkPreview: linkPreviewSchema,
+    poll: pollSchema,
     mentions: {
       type: [{ type: Schema.Types.ObjectId, ref: "User" }],
       default: [],

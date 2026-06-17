@@ -10,8 +10,49 @@ import { enqueueNewMessageNotification } from "../lib/queues.js";
 import { sendPush } from "../lib/push.js";
 import { messagesSentTotal } from "../lib/metrics.js";
 
-const messagePreview = (m: { text?: string; image?: string; audio?: string }) =>
-  m.text || (m.image ? "📷 Photo" : m.audio ? "🎤 Voice note" : "New message");
+const messagePreview = (m: { text?: string; image?: string; audio?: string; file?: unknown; poll?: unknown }) =>
+  m.text ||
+  (m.image ? "📷 Photo" : m.audio ? "🎤 Voice note" : m.file ? "📎 File" : m.poll ? "📊 Poll" : "New message");
+
+// build a poll subdocument from a {question, options[], multiple} payload
+function buildPoll(poll: { question?: string; options?: string[]; multiple?: boolean } | undefined) {
+  if (!poll?.question || !Array.isArray(poll.options) || poll.options.length < 2) return undefined;
+  return {
+    question: String(poll.question).trim(),
+    options: poll.options.slice(0, 10).map((t) => ({ text: String(t).trim(), votes: [] })),
+    multiple: Boolean(poll.multiple),
+  };
+}
+
+// fetch OpenGraph metadata for the first URL in the text, then patch the message + notify
+async function applyLinkPreview(message: { _id: unknown; text?: string }) {
+  const url = message.text?.match(/https?:\/\/[^\s]+/)?.[0];
+  if (!url) return;
+  try {
+    const { hostname } = new URL(url);
+    if (/^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(hostname)) return; // no SSRF to internal
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 3000);
+    const res = await fetch(url, { signal: ctrl.signal, headers: { "user-agent": "DevChatBot/1.0" } });
+    clearTimeout(timer);
+    const html = (await res.text()).slice(0, 200_000);
+    const meta = (prop: string) =>
+      html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]+content=["']([^"']+)["']`, "i"))?.[1] ||
+      html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${prop}["']`, "i"))?.[1];
+    const title = meta("og:title") || html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1];
+    const description = meta("og:description") || meta("description");
+    const image = meta("og:image");
+    if (!title && !description && !image) return;
+    const updated = await Message.findByIdAndUpdate(
+      message._id,
+      { linkPreview: { url, title, description, image } },
+      { new: true }
+    );
+    if (updated) await emitMessageUpdate(updated);
+  } catch {
+    /* preview is best-effort */
+  }
+}
 
 // messages can only be edited/deleted within 10 minutes of sending
 const EDIT_WINDOW_MS = 10 * 60 * 1000;
@@ -173,11 +214,12 @@ async function resolveMentions(
 
 export const sendMessage: RequestHandler = async (req, res, next) => {
   try {
-    const { text, image, audio, replyTo } = req.body;
+    const { text, image, audio, file, poll, replyTo } = req.body;
     const { id: receiverId } = req.params;
     const senderId = req.user!._id;
 
-    if (!text && !image && !audio) {
+    const pollDoc = buildPoll(poll);
+    if (!text && !image && !audio && !file && !pollDoc) {
       res.status(400).json({ message: "Message cannot be empty" });
       return;
     }
@@ -203,6 +245,12 @@ export const sendMessage: RequestHandler = async (req, res, next) => {
       audioUrl = uploadResponse.secure_url;
     }
 
+    let fileDoc;
+    if (file?.data) {
+      const uploadResponse = await cloudinary.uploader.upload(file.data, { resource_type: "auto" });
+      fileDoc = { url: uploadResponse.secure_url, name: file.name || "file", size: file.size || 0, type: file.type || "" };
+    }
+
     const conversation = await getOrCreateDirect(senderId, String(receiverId));
 
     // if the recipient is online, the message is delivered right away
@@ -216,6 +264,8 @@ export const sendMessage: RequestHandler = async (req, res, next) => {
       text,
       image: imageUrl,
       audio: audioUrl,
+      file: fileDoc,
+      poll: pollDoc,
       mentions: await resolveMentions(text, conversation.participants),
       deliveredAt,
       expiresAt: computeExpiry(conversation.disappearMinutes),
@@ -225,6 +275,7 @@ export const sendMessage: RequestHandler = async (req, res, next) => {
     await newMessage.save();
     await newMessage.populate("replyTo", "text senderId image deletedAt");
     messagesSentTotal.inc();
+    applyLinkPreview(newMessage); // fire-and-forget unfurl
 
     // bump conversation metadata + the receiver's unread count
     await Conversation.updateOne(
@@ -444,6 +495,48 @@ export const pinMessage: RequestHandler = async (req, res, next) => {
   }
 };
 
+export const votePoll: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const { messageId } = req.params;
+    const idx = Number(req.body.optionIndex);
+
+    const message = await Message.findById(messageId);
+    if (!message?.poll) {
+      res.status(404).json({ message: "Poll not found" });
+      return;
+    }
+    const conv = await Conversation.findById(message.conversationId);
+    if (!conv || !conv.participants.map(String).includes(myId)) {
+      res.status(403).json({ message: "Not a participant" });
+      return;
+    }
+    if (Number.isNaN(idx) || idx < 0 || idx >= message.poll.options.length) {
+      res.status(400).json({ message: "Invalid option" });
+      return;
+    }
+
+    const opt = message.poll.options[idx]!;
+    const voted = opt.votes.some((v) => String(v) === myId);
+    if (!message.poll.multiple) {
+      message.poll.options.forEach((o) => {
+        o.votes = o.votes.filter((v) => String(v) !== myId);
+      });
+    }
+    if (voted) {
+      opt.votes = opt.votes.filter((v) => String(v) !== myId); // unvote
+    } else {
+      opt.votes.push(req.user!._id);
+    }
+    message.markModified("poll");
+    await message.save();
+    await emitMessageUpdate(message);
+    res.status(200).json(message);
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const forwardMessage: RequestHandler = async (req, res, next) => {
   try {
     const senderId = req.user!._id;
@@ -604,9 +697,10 @@ export const sendToConversation: RequestHandler = async (req, res, next) => {
   try {
     const senderId = req.user!._id;
     const { conversationId } = req.params;
-    const { text, image, audio, replyTo } = req.body;
+    const { text, image, audio, file, poll, replyTo } = req.body;
 
-    if (!text && !image && !audio) {
+    const pollDoc = buildPoll(poll);
+    if (!text && !image && !audio && !file && !pollDoc) {
       res.status(400).json({ message: "Message cannot be empty" });
       return;
     }
@@ -629,6 +723,11 @@ export const sendToConversation: RequestHandler = async (req, res, next) => {
       audioUrl = (
         await cloudinary.uploader.upload(audio, { resource_type: "video", format: "mp3" })
       ).secure_url;
+    let fileDoc;
+    if (file?.data) {
+      const up = await cloudinary.uploader.upload(file.data, { resource_type: "auto" });
+      fileDoc = { url: up.secure_url, name: file.name || "file", size: file.size || 0, type: file.type || "" };
+    }
 
     const newMessage = new Message({
       conversationId: conversation._id,
@@ -636,6 +735,8 @@ export const sendToConversation: RequestHandler = async (req, res, next) => {
       text,
       image: imageUrl,
       audio: audioUrl,
+      file: fileDoc,
+      poll: pollDoc,
       mentions: await resolveMentions(text, conversation.participants),
       expiresAt: computeExpiry(conversation.disappearMinutes),
       replyTo: replyTo || undefined,
@@ -643,6 +744,7 @@ export const sendToConversation: RequestHandler = async (req, res, next) => {
     await newMessage.save();
     await newMessage.populate("replyTo", "text senderId image deletedAt");
     messagesSentTotal.inc();
+    applyLinkPreview(newMessage); // fire-and-forget unfurl
 
     const unreadInc: Record<string, number> = {};
     for (const p of participants) if (p !== String(senderId)) unreadInc[`unread.${p}`] = 1;

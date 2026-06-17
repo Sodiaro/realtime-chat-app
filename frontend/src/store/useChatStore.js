@@ -341,6 +341,15 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
+  votePoll: async (messageId, optionIndex) => {
+    try {
+      const res = await axiosInstance.post(`/messages/${messageId}/vote`, { optionIndex });
+      set({ messages: get().messages.map((m) => (m._id === messageId ? res.data : m)) });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to vote");
+    }
+  },
+
   pinMessage: async (messageId) => {
     try {
       const res = await axiosInstance.post(`/messages/${messageId}/pin`);

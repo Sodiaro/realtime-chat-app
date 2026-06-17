@@ -1,18 +1,22 @@
 import { useRef, useState } from "react";
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
-import { Image, Send, X, Reply, Mic, Pause, Play, Trash2 } from "lucide-react";
+import { Image, Send, X, Reply, Mic, Pause, Play, Trash2, Paperclip, BarChart3, FileText } from "lucide-react";
 import toast from "react-hot-toast";
+import PollModal from "./PollModal";
 
 const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
 const MessageInput = () => {
   const [text, setText] = useState("");
   const [imagePreview, setImagePreview] = useState(null);
+  const [filePreview, setFilePreview] = useState(null);
+  const [showPoll, setShowPoll] = useState(false);
   const [recording, setRecording] = useState(false);
   const [paused, setPaused] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const fileInputRef = useRef(null);
+  const docInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
@@ -118,15 +122,35 @@ const MessageInput = () => {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  const handleDocChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("File too large (max 10MB)");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = () =>
+      setFilePreview({ data: reader.result, name: file.name, size: file.size, type: file.type });
+    reader.readAsDataURL(file);
+  };
+
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!text.trim() && !imagePreview) return;
+    if (!text.trim() && !imagePreview && !filePreview) return;
     try {
       stopTyping();
-      await sendMessage({ text: text.trim(), image: imagePreview, replyTo: replyingTo?._id });
+      await sendMessage({
+        text: text.trim(),
+        image: imagePreview,
+        file: filePreview,
+        replyTo: replyingTo?._id,
+      });
       setText("");
       setImagePreview(null);
+      setFilePreview(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
+      if (docInputRef.current) docInputRef.current.value = "";
     } catch (error) {
       console.error("Failed to send message:", error);
     }
@@ -174,6 +198,16 @@ const MessageInput = () => {
         </div>
       )}
 
+      {filePreview && !recording && (
+        <div className="mb-3 flex items-center gap-2 rounded-lg bg-base-200 px-3 py-2 max-w-xs">
+          <FileText className="size-5 text-primary shrink-0" />
+          <span className="text-sm truncate flex-1">{filePreview.name}</span>
+          <button type="button" onClick={() => setFilePreview(null)}>
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
+
       {recording ? (
         <div className="flex items-center gap-2 rounded-lg bg-base-200 px-3 py-2">
           <span className={`size-2.5 rounded-full bg-red-500 ${paused ? "" : "animate-pulse"}`} />
@@ -208,6 +242,7 @@ const MessageInput = () => {
               ref={fileInputRef}
               onChange={handleImageChange}
             />
+            <input type="file" className="hidden" ref={docInputRef} onChange={handleDocChange} />
             <button
               type="button"
               className={`btn btn-ghost btn-sm btn-circle ${imagePreview ? "text-primary" : "text-base-content/50"}`}
@@ -215,6 +250,22 @@ const MessageInput = () => {
               title="Attach image"
             >
               <Image size={18} />
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm btn-circle text-base-content/50"
+              onClick={() => docInputRef.current?.click()}
+              title="Attach file"
+            >
+              <Paperclip size={18} />
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm btn-circle text-base-content/50"
+              onClick={() => setShowPoll(true)}
+              title="Create poll"
+            >
+              <BarChart3 size={18} />
             </button>
             <button
               type="button"
@@ -228,12 +279,14 @@ const MessageInput = () => {
           <button
             type="submit"
             className="btn btn-primary btn-circle"
-            disabled={!text.trim() && !imagePreview}
+            disabled={!text.trim() && !imagePreview && !filePreview}
           >
             <Send size={20} />
           </button>
         </form>
       )}
+
+      {showPoll && <PollModal onClose={() => setShowPoll(false)} />}
     </div>
   );
 };

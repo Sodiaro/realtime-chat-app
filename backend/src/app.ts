@@ -16,6 +16,8 @@ import authRoutes from "./routes/auth.route.js";
 import messageRoutes from "./routes/message.route.js";
 import adminRoutes from "./routes/admin.route.js";
 import pushRoutes from "./routes/push.route.js";
+import callRoutes from "./routes/call.route.js";
+import statusRoutes from "./routes/status.route.js";
 import { apiLimiter } from "./middleware/rateLimit.js";
 import { errorHandler } from "./middleware/error.middleware.js";
 import { app } from "./lib/socket.js";
@@ -54,8 +56,8 @@ app.use((req, res, next) => {
 });
 
 app.use(helmet());
-app.use(express.json({ limit: "2mb" }));
-app.use(express.urlencoded({ extended: true, limit: "2mb" }));
+app.use(express.json({ limit: "12mb" })); // base64 files/images
+app.use(express.urlencoded({ extended: true, limit: "12mb" }));
 app.use(cookieParser());
 
 app.use(
@@ -92,6 +94,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/push", pushRoutes);
+app.use("/api/calls", callRoutes);
+app.use("/api/status", statusRoutes);
 
 if (env.NODE_ENV === "production") {
   app.use(express.static(path.join(__dirname, "../frontend/dist")));
@@ -101,6 +105,6 @@ if (env.NODE_ENV === "production") {
   });
 }
 
-app.use(errorHandler); // must stay last
+app.use(errorHandler);
 
 export { app };
