@@ -2,10 +2,11 @@ import { useRef, useState, useEffect } from "react";
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
 import { useDraftStore } from "../store/useDraftStore";
-import { Image, Send, X, Reply, Mic, Pause, Play, Trash2, Paperclip, BarChart3, FileText, Clock } from "lucide-react";
+import { Image, Send, X, Reply, Mic, Pause, Play, Trash2, Paperclip, BarChart3, FileText, Clock, Plus, MapPin, UserRound } from "lucide-react";
 import toast from "react-hot-toast";
 import PollModal from "./PollModal";
 import ScheduleModal from "./ScheduleModal";
+import ContactPickerModal from "./ContactPickerModal";
 
 const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
@@ -15,6 +16,7 @@ const MessageInput = () => {
   const [filePreview, setFilePreview] = useState(null);
   const [showPoll, setShowPoll] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
+  const [showContact, setShowContact] = useState(false);
   const [recording, setRecording] = useState(false);
   const [paused, setPaused] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -186,6 +188,34 @@ const MessageInput = () => {
     setShowSchedule(true);
   };
 
+  // share the device's current location as a map message
+  const shareLocation = () => {
+    document.activeElement?.blur(); // close the attach menu
+    if (!navigator.geolocation) {
+      toast.error("Geolocation isn't supported on this device");
+      return;
+    }
+    const id = toast.loading("Getting your location…");
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        toast.dismiss(id);
+        await sendMessage({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } });
+      },
+      () => {
+        toast.dismiss(id);
+        toast.error("Couldn't get your location. Check permissions.");
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const shareContact = async (u) => {
+    setShowContact(false);
+    await sendMessage({
+      contact: { userId: u._id, name: u.fullName, username: u.username, avatar: u.profilePic },
+    });
+  };
+
   if (isBlocked) {
     return (
       <div className="p-4 w-full text-center text-sm text-base-content/60">
@@ -273,30 +303,48 @@ const MessageInput = () => {
               onChange={handleImageChange}
             />
             <input type="file" className="hidden" ref={docInputRef} onChange={handleDocChange} />
-            <button
-              type="button"
-              className={`btn btn-ghost btn-sm btn-circle ${imagePreview ? "text-primary" : "text-base-content/50"}`}
-              onClick={() => fileInputRef.current?.click()}
-              title="Attach image"
-            >
-              <Image size={18} />
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm btn-circle text-base-content/50"
-              onClick={() => docInputRef.current?.click()}
-              title="Attach file"
-            >
-              <Paperclip size={18} />
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm btn-circle text-base-content/50"
-              onClick={() => setShowPoll(true)}
-              title="Create poll"
-            >
-              <BarChart3 size={18} />
-            </button>
+
+            <div className="dropdown dropdown-top">
+              <button
+                type="button"
+                tabIndex={0}
+                className="btn btn-ghost btn-sm btn-circle text-base-content/50"
+                title="Attach"
+              >
+                <Plus size={18} />
+              </button>
+              <ul
+                tabIndex={0}
+                className="dropdown-content menu bg-base-100 rounded-box shadow w-44 mb-2 z-50"
+              >
+                <li>
+                  <button type="button" onClick={() => fileInputRef.current?.click()}>
+                    <Image className="size-4" /> Photo
+                  </button>
+                </li>
+                <li>
+                  <button type="button" onClick={() => docInputRef.current?.click()}>
+                    <Paperclip className="size-4" /> Document
+                  </button>
+                </li>
+                <li>
+                  <button type="button" onClick={() => setShowPoll(true)}>
+                    <BarChart3 className="size-4" /> Poll
+                  </button>
+                </li>
+                <li>
+                  <button type="button" onClick={shareLocation}>
+                    <MapPin className="size-4" /> Location
+                  </button>
+                </li>
+                <li>
+                  <button type="button" onClick={() => setShowContact(true)}>
+                    <UserRound className="size-4" /> Contact
+                  </button>
+                </li>
+              </ul>
+            </div>
+
             <button
               type="button"
               className="btn btn-ghost btn-sm btn-circle text-base-content/50"
@@ -333,6 +381,9 @@ const MessageInput = () => {
           onClose={() => setShowSchedule(false)}
           onScheduled={afterScheduled}
         />
+      )}
+      {showContact && (
+        <ContactPickerModal onClose={() => setShowContact(false)} onPick={shareContact} />
       )}
     </div>
   );

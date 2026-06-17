@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, CheckCheck, Pencil, Trash2, SmilePlus, X, Reply, Forward, Pin, Flag, Star, FileText, Download } from "lucide-react";
+import { Check, CheckCheck, Pencil, Trash2, SmilePlus, X, Reply, Forward, Pin, Flag, Star, FileText, Download, MapPin, MessageSquare } from "lucide-react";
 import { useChatStore } from "../store/useChatStore";
 import { formatMessageTime } from "../lib/utils";
 import Avatar from "./Avatar";
@@ -20,7 +20,7 @@ const renderText = (text) =>
   );
 
 const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
-  const { editMessage, deleteMessage, reactToMessage, setReplyingTo, setForwarding, pinMessage, reportMessage, starMessage, votePoll } =
+  const { editMessage, deleteMessage, reactToMessage, setReplyingTo, setForwarding, pinMessage, reportMessage, starMessage, votePoll, setSelectedUser } =
     useChatStore();
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(message.text || "");
@@ -55,6 +55,10 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
     reactToMessage(message._id, emoji);
     setShowPicker(false);
   };
+
+  // open a DM with a shared contact
+  const openContactChat = (c) =>
+    setSelectedUser({ _id: c.userId, fullName: c.name, username: c.username, profilePic: c.avatar });
 
   // group reactions by emoji → { "👍": 2, ... }
   const grouped = (message.reactions || []).reduce((acc, r) => {
@@ -179,6 +183,52 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
                   {message.poll.options.reduce((s, x) => s + x.votes.length, 0)} votes
                   {message.poll.multiple ? " · multiple choice" : ""}
                 </p>
+              </div>
+            )}
+            {message.location && (
+              <a
+                href={`https://www.google.com/maps?q=${message.location.lat},${message.location.lng}`}
+                target="_blank"
+                rel="noreferrer"
+                className="block rounded-lg overflow-hidden border border-base-300/60 mb-1 max-w-[260px] hover:opacity-95"
+              >
+                <iframe
+                  title="Shared location"
+                  loading="lazy"
+                  className="w-[260px] h-[140px] pointer-events-none block"
+                  src={`https://www.openstreetmap.org/export/embed.html?bbox=${
+                    message.location.lng - 0.01
+                  }%2C${message.location.lat - 0.01}%2C${message.location.lng + 0.01}%2C${
+                    message.location.lat + 0.01
+                  }&layer=mapnik&marker=${message.location.lat}%2C${message.location.lng}`}
+                />
+                <div className="px-2 py-1.5 flex items-center gap-1.5 text-sm">
+                  <MapPin className="size-4 text-primary shrink-0" />
+                  <span className="truncate">{message.location.label || "Shared location"}</span>
+                </div>
+              </a>
+            )}
+            {message.contact && (
+              <div className="flex items-center gap-3 p-2 rounded-lg bg-base-200/60 mb-1 min-w-[200px] max-w-[260px]">
+                <Avatar
+                  user={{ profilePic: message.contact.avatar, fullName: message.contact.name }}
+                  size="size-10"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium truncate">{message.contact.name}</div>
+                  {message.contact.username && (
+                    <div className="text-xs opacity-60 truncate">@{message.contact.username}</div>
+                  )}
+                </div>
+                {message.contact.userId && message.contact.userId !== authUser._id && (
+                  <button
+                    onClick={() => openContactChat(message.contact)}
+                    className="btn btn-xs btn-primary gap-1"
+                    title="Message"
+                  >
+                    <MessageSquare className="size-3" />
+                  </button>
+                )}
               </div>
             )}
             {message.text && <p>{renderText(message.text)}</p>}

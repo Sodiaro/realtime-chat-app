@@ -11,9 +11,29 @@ import { enqueueNewMessageNotification } from "../lib/queues.js";
 import { sendPush } from "../lib/push.js";
 import { messagesSentTotal } from "../lib/metrics.js";
 
-const messagePreview = (m: { text?: string; image?: string; audio?: string; file?: unknown; poll?: unknown }) =>
+const messagePreview = (m: {
+  text?: string;
+  image?: string;
+  audio?: string;
+  file?: unknown;
+  poll?: unknown;
+  location?: unknown;
+  contact?: unknown;
+}) =>
   m.text ||
-  (m.image ? "📷 Photo" : m.audio ? "🎤 Voice note" : m.file ? "📎 File" : m.poll ? "📊 Poll" : "New message");
+  (m.image
+    ? "📷 Photo"
+    : m.audio
+      ? "🎤 Voice note"
+      : m.file
+        ? "📎 File"
+        : m.poll
+          ? "📊 Poll"
+          : m.location
+            ? "📍 Location"
+            : m.contact
+              ? "👤 Contact"
+              : "New message");
 
 // build a poll subdocument from a {question, options[], multiple} payload
 function buildPoll(poll: { question?: string; options?: string[]; multiple?: boolean } | undefined) {
@@ -22,6 +42,30 @@ function buildPoll(poll: { question?: string; options?: string[]; multiple?: boo
     question: String(poll.question).trim(),
     options: poll.options.slice(0, 10).map((t) => ({ text: String(t).trim(), votes: [] })),
     multiple: Boolean(poll.multiple),
+  };
+}
+
+// validate a shared location ({lat, lng} within range)
+function buildLocation(loc: { lat?: number; lng?: number; label?: string } | undefined) {
+  if (!loc) return undefined;
+  const lat = Number(loc.lat);
+  const lng = Number(loc.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+    return undefined;
+  }
+  return { lat, lng, label: loc.label ? String(loc.label).slice(0, 120) : undefined };
+}
+
+// build a shared-contact card (name required)
+function buildContact(
+  c: { userId?: string; name?: string; username?: string; avatar?: string } | undefined
+) {
+  if (!c?.name?.trim()) return undefined;
+  return {
+    userId: c.userId || undefined,
+    name: String(c.name).trim().slice(0, 120),
+    username: c.username ? String(c.username).slice(0, 60) : undefined,
+    avatar: c.avatar ? String(c.avatar) : undefined,
   };
 }
 
@@ -216,12 +260,14 @@ async function resolveMentions(
 
 export const sendMessage: RequestHandler = async (req, res, next) => {
   try {
-    const { text, image, audio, file, poll, replyTo } = req.body;
+    const { text, image, audio, file, poll, location, contact, replyTo } = req.body;
     const { id: receiverId } = req.params;
     const senderId = req.user!._id;
 
     const pollDoc = buildPoll(poll);
-    if (!text && !image && !audio && !file && !pollDoc) {
+    const locationDoc = buildLocation(location);
+    const contactDoc = buildContact(contact);
+    if (!text && !image && !audio && !file && !pollDoc && !locationDoc && !contactDoc) {
       res.status(400).json({ message: "Message cannot be empty" });
       return;
     }
@@ -268,6 +314,8 @@ export const sendMessage: RequestHandler = async (req, res, next) => {
       audio: audioUrl,
       file: fileDoc,
       poll: pollDoc,
+      location: locationDoc,
+      contact: contactDoc,
       mentions: await resolveMentions(text, conversation.participants),
       deliveredAt,
       expiresAt: computeExpiry(conversation.disappearMinutes),
@@ -303,7 +351,7 @@ export const sendMessage: RequestHandler = async (req, res, next) => {
     if (!online.includes(String(receiverId))) {
       sendPush([String(receiverId)], {
         title: req.user!.fullName,
-        body: messagePreview({ text, image: imageUrl, audio: audioUrl }),
+        body: messagePreview({ text, image: imageUrl, audio: audioUrl, location: locationDoc, contact: contactDoc }),
       }).catch(() => {});
     }
 
@@ -699,10 +747,12 @@ export const sendToConversation: RequestHandler = async (req, res, next) => {
   try {
     const senderId = req.user!._id;
     const { conversationId } = req.params;
-    const { text, image, audio, file, poll, replyTo } = req.body;
+    const { text, image, audio, file, poll, location, contact, replyTo } = req.body;
 
     const pollDoc = buildPoll(poll);
-    if (!text && !image && !audio && !file && !pollDoc) {
+    const locationDoc = buildLocation(location);
+    const contactDoc = buildContact(contact);
+    if (!text && !image && !audio && !file && !pollDoc && !locationDoc && !contactDoc) {
       res.status(400).json({ message: "Message cannot be empty" });
       return;
     }
@@ -739,6 +789,8 @@ export const sendToConversation: RequestHandler = async (req, res, next) => {
       audio: audioUrl,
       file: fileDoc,
       poll: pollDoc,
+      location: locationDoc,
+      contact: contactDoc,
       mentions: await resolveMentions(text, conversation.participants),
       expiresAt: computeExpiry(conversation.disappearMinutes),
       replyTo: replyTo || undefined,
@@ -764,7 +816,7 @@ export const sendToConversation: RequestHandler = async (req, res, next) => {
     if (offline.length) {
       sendPush(offline, {
         title: `${req.user!.fullName}${conversation.name ? " · " + conversation.name : ""}`,
-        body: messagePreview({ text, image: imageUrl, audio: audioUrl }),
+        body: messagePreview({ text, image: imageUrl, audio: audioUrl, location: locationDoc, contact: contactDoc }),
       }).catch(() => {});
     }
 

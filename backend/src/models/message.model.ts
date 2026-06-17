@@ -30,6 +30,19 @@ export interface IPoll {
   multiple: boolean;
 }
 
+export interface ILocation {
+  lat: number;
+  lng: number;
+  label?: string;
+}
+
+export interface IContactCard {
+  userId?: Types.ObjectId;
+  name: string;
+  username?: string;
+  avatar?: string;
+}
+
 export interface IMessage {
   _id: Types.ObjectId;
   conversationId: Types.ObjectId;
@@ -41,6 +54,8 @@ export interface IMessage {
   file?: IFile;
   linkPreview?: ILinkPreview;
   poll?: IPoll;
+  location?: ILocation;
+  contact?: IContactCard;
   mentions: Types.ObjectId[];
   deliveredAt?: Date;
   readAt?: Date;
@@ -70,6 +85,14 @@ const pollSchema = new Schema<IPoll>(
     options: [{ text: String, votes: [{ type: Schema.Types.ObjectId, ref: "User" }] }],
     multiple: Boolean,
   },
+  { _id: false }
+);
+const locationSchema = new Schema<ILocation>(
+  { lat: Number, lng: Number, label: String },
+  { _id: false }
+);
+const contactSchema = new Schema<IContactCard>(
+  { userId: { type: Schema.Types.ObjectId, ref: "User" }, name: String, username: String, avatar: String },
   { _id: false }
 );
 
@@ -102,6 +125,8 @@ const messageSchema = new Schema<IMessage>(
     file: fileSchema,
     linkPreview: linkPreviewSchema,
     poll: pollSchema,
+    location: locationSchema,
+    contact: contactSchema,
     mentions: {
       type: [{ type: Schema.Types.ObjectId, ref: "User" }],
       default: [],
