@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Search, Ban, Users, MoreVertical, BellOff, Bell, Archive, Info, UserRound, Timer, Phone, Video } from "lucide-react";
+import { X, Search, Ban, Users, MoreVertical, BellOff, Bell, Archive, Info, UserRound, Timer, Phone, Video, Pin } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 import { useCallStore } from "../store/useCallStore";
@@ -10,7 +10,7 @@ import UserProfileModal from "./UserProfileModal";
 import Avatar from "./Avatar";
 
 const ChatHeader = () => {
-  const { selectedUser, setSelectedUser, conversations, toggleMute, toggleArchive, setDisappearing } =
+  const { selectedUser, setSelectedUser, conversations, toggleMute, toggleArchive, togglePin, setDisappearing } =
     useChatStore();
   const { onlineUsers, authUser, blockUser } = useAuthStore();
   const isGroup = selectedUser.isGroup;
@@ -130,6 +130,14 @@ const ChatHeader = () => {
                 <li>
                   <button onClick={() => setShowGroupInfo(true)}>
                     <Info className="size-4" /> Group info
+                  </button>
+                </li>
+              )}
+              {conv && (
+                <li>
+                  <button onClick={() => togglePin(conv._id)}>
+                    <Pin className="size-4" />
+                    {conv.isPinned ? "Unpin" : "Pin to top"}
                   </button>
                 </li>
               )}

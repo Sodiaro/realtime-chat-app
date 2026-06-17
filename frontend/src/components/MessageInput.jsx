@@ -1,9 +1,11 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
-import { Image, Send, X, Reply, Mic, Pause, Play, Trash2, Paperclip, BarChart3, FileText } from "lucide-react";
+import { useDraftStore } from "../store/useDraftStore";
+import { Image, Send, X, Reply, Mic, Pause, Play, Trash2, Paperclip, BarChart3, FileText, Clock } from "lucide-react";
 import toast from "react-hot-toast";
 import PollModal from "./PollModal";
+import ScheduleModal from "./ScheduleModal";
 
 const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
@@ -12,6 +14,7 @@ const MessageInput = () => {
   const [imagePreview, setImagePreview] = useState(null);
   const [filePreview, setFilePreview] = useState(null);
   const [showPoll, setShowPoll] = useState(false);
+  const [showSchedule, setShowSchedule] = useState(false);
   const [recording, setRecording] = useState(false);
   const [paused, setPaused] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -25,6 +28,13 @@ const MessageInput = () => {
   const { sendMessage, emitTyping, emitRecording, selectedUser, replyingTo, setReplyingTo } =
     useChatStore();
   const { authUser } = useAuthStore();
+  const { getDraft, setDraft, clearDraft } = useDraftStore();
+  const chatId = selectedUser?._id;
+
+  // load this chat's saved draft when switching conversations
+  useEffect(() => {
+    setText(getDraft(chatId));
+  }, [chatId, getDraft]);
 
   // DMs can be blocked; groups can't
   const isBlocked =
@@ -96,6 +106,7 @@ const MessageInput = () => {
   // emit "typing" on keystroke, auto-clear after a short idle gap
   const handleTextChange = (e) => {
     setText(e.target.value);
+    setDraft(chatId, e.target.value); // persist unsent text per chat
     emitTyping(true);
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => emitTyping(false), 1500);
@@ -147,6 +158,7 @@ const MessageInput = () => {
         replyTo: replyingTo?._id,
       });
       setText("");
+      clearDraft(chatId);
       setImagePreview(null);
       setFilePreview(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -154,6 +166,24 @@ const MessageInput = () => {
     } catch (error) {
       console.error("Failed to send message:", error);
     }
+  };
+
+  // clear the composer after a message has been queued for later delivery
+  const afterScheduled = () => {
+    setText("");
+    clearDraft(chatId);
+    setImagePreview(null);
+    setFilePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (docInputRef.current) docInputRef.current.value = "";
+  };
+
+  const openSchedule = () => {
+    if (!text.trim() && !imagePreview && !filePreview) {
+      toast.error("Write a message to schedule first");
+      return;
+    }
+    setShowSchedule(true);
   };
 
   if (isBlocked) {
@@ -269,6 +299,14 @@ const MessageInput = () => {
             </button>
             <button
               type="button"
+              className="btn btn-ghost btn-sm btn-circle text-base-content/50"
+              onClick={openSchedule}
+              title="Schedule message"
+            >
+              <Clock size={18} />
+            </button>
+            <button
+              type="button"
               onClick={startRecording}
               className="btn btn-ghost btn-sm btn-circle text-base-content/50"
               title="Record voice note"
@@ -287,6 +325,15 @@ const MessageInput = () => {
       )}
 
       {showPoll && <PollModal onClose={() => setShowPoll(false)} />}
+      {showSchedule && (
+        <ScheduleModal
+          text={text.trim()}
+          image={imagePreview}
+          file={filePreview}
+          onClose={() => setShowSchedule(false)}
+          onScheduled={afterScheduled}
+        />
+      )}
     </div>
   );
 };

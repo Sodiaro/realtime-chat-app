@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
+import { useDraftStore } from "../store/useDraftStore";
 import SidebarSkeleton from "./skeletons/SidebarSkeleton";
 import CreateGroupModal from "./CreateGroupModal";
 import StatusBar from "./StatusBar";
 import Avatar from "./Avatar";
-import { Users, UsersRound, Plus, BellOff, Archive, Search, X } from "lucide-react";
+import { Users, UsersRound, Plus, BellOff, Pin, Archive, Search, X } from "lucide-react";
 
 const Sidebar = () => {
   const {
@@ -20,6 +21,7 @@ const Sidebar = () => {
   } = useChatStore();
 
   const { onlineUsers } = useAuthStore();
+  const { drafts } = useDraftStore();
   const [showOnlineOnly, setShowOnlineOnly] = useState(false);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
@@ -54,14 +56,15 @@ const Sidebar = () => {
   const convForUser = (userId) =>
     conversations.find((c) => !c.isGroup && c.participants?.some((p) => (p._id || p) === userId));
   const lastAt = (conv) => (conv?.lastMessageAt ? new Date(conv.lastMessageAt).getTime() : 0);
+  const pin = (conv) => (conv?.isPinned ? 1 : 0);
 
-  // groups + DMs, newest activity first
+  // groups + DMs: pinned first, then newest activity
   const groups = conversations
     .filter((c) => c.isGroup)
-    .sort((a, b) => lastAt(b) - lastAt(a));
+    .sort((a, b) => pin(b) - pin(a) || lastAt(b) - lastAt(a));
   const usersWithConv = filteredUsers
     .map((u) => ({ u, conv: convForUser(u._id) }))
-    .sort((a, b) => lastAt(b.conv) - lastAt(a.conv));
+    .sort((a, b) => pin(b.conv) - pin(a.conv) || lastAt(b.conv) - lastAt(a.conv));
 
   const activeGroups = groups.filter((g) => !g.isArchived);
   const archivedGroups = groups.filter((g) => g.isArchived);
@@ -88,10 +91,19 @@ const Sidebar = () => {
       <div className="flex items-center w-full text-left min-w-0 gap-1">
         <div className="min-w-0">
           <div className="font-medium truncate">{c.name}</div>
-          <div className="text-sm text-zinc-400">{c.participants?.length || 0} members</div>
+          <div className="text-sm truncate">
+            {drafts[c._id] && selectedUser?._id !== c._id ? (
+              <span className="text-error">Draft: {drafts[c._id]}</span>
+            ) : (
+              <span className="text-zinc-400">{c.participants?.length || 0} members</span>
+            )}
+          </div>
         </div>
-        {c.isMuted && <BellOff className="size-3.5 opacity-50 ml-auto" />}
-        <Badge count={c.unread} />
+        <div className="ml-auto flex items-center gap-1 shrink-0">
+          {c.isPinned && <Pin className="size-3.5 opacity-50 -rotate-45" />}
+          {c.isMuted && <BellOff className="size-3.5 opacity-50" />}
+          <Badge count={c.unread} />
+        </div>
       </div>
     </button>
   );
@@ -113,12 +125,21 @@ const Sidebar = () => {
       <div className="flex items-center w-full text-left min-w-0 gap-1">
         <div className="min-w-0">
           <div className="font-medium truncate">{user.fullName}</div>
-          <div className="text-sm text-zinc-400">
-            {onlineUsers.includes(user._id) ? "Online" : "Offline"}
+          <div className="text-sm truncate">
+            {drafts[user._id] && selectedUser?._id !== user._id ? (
+              <span className="text-error">Draft: {drafts[user._id]}</span>
+            ) : (
+              <span className="text-zinc-400">
+                {onlineUsers.includes(user._id) ? "Online" : "Offline"}
+              </span>
+            )}
           </div>
         </div>
-        {conv?.isMuted && <BellOff className="size-3.5 opacity-50 ml-auto" />}
-        <Badge count={conv?.unread || 0} />
+        <div className="ml-auto flex items-center gap-1 shrink-0">
+          {conv?.isPinned && <Pin className="size-3.5 opacity-50 -rotate-45" />}
+          {conv?.isMuted && <BellOff className="size-3.5 opacity-50" />}
+          <Badge count={conv?.unread || 0} />
+        </div>
       </div>
     </button>
   );

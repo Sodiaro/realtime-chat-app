@@ -22,6 +22,7 @@ export const openapiSpec = {
     { name: "Account" },
     { name: "Users" },
     { name: "Messages" },
+    { name: "Scheduled" },
     { name: "Conversations" },
     { name: "Moderation" },
     { name: "Push" },
@@ -114,8 +115,29 @@ export const openapiSpec = {
           unread: { type: "integer" },
           isMuted: { type: "boolean" },
           isArchived: { type: "boolean" },
+          isPinned: { type: "boolean" },
           isAdmin: { type: "boolean" },
           disappearMinutes: { type: "integer", description: "0 = off" },
+        },
+      },
+      ScheduledMessage: {
+        type: "object",
+        properties: {
+          _id: ID,
+          senderId: ID,
+          conversationId: ID,
+          receiverId: { ...ID, nullable: true, description: "set for DMs, null for groups" },
+          text: { type: "string", nullable: true },
+          image: { type: "string", nullable: true },
+          file: {
+            type: "object",
+            nullable: true,
+            properties: { url: { type: "string" }, name: { type: "string" }, size: { type: "integer" }, type: { type: "string" } },
+          },
+          scheduledAt: { type: "string", format: "date-time" },
+          status: { type: "string", enum: ["pending", "sent", "canceled"] },
+          sentMessageId: { ...ID, nullable: true },
+          createdAt: { type: "string", format: "date-time" },
         },
       },
       Report: {
@@ -529,6 +551,15 @@ export const openapiSpec = {
         responses: { 200: ok("Archive state", { type: "object", properties: { isArchived: { type: "boolean" } } }) },
       },
     },
+    "/api/messages/conversation/{conversationId}/pin": {
+      post: {
+        tags: ["Conversations"],
+        summary: "Toggle pin-to-top for the current user",
+        security: auth,
+        parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: ok("Pin state", { type: "object", properties: { isPinned: { type: "boolean" } } }) },
+      },
+    },
     "/api/messages/conversation/{conversationId}/disappearing": {
       post: {
         tags: ["Conversations"],
@@ -544,6 +575,45 @@ export const openapiSpec = {
           }),
         },
         responses: { 200: ok("Updated", { type: "object", properties: { disappearMinutes: { type: "integer" } } }) },
+      },
+    },
+    "/api/messages/scheduled": {
+      get: {
+        tags: ["Scheduled"],
+        summary: "List the current user's pending scheduled messages",
+        security: auth,
+        responses: { 200: ok("Pending scheduled messages", arrayOf("ScheduledMessage")) },
+      },
+      post: {
+        tags: ["Scheduled"],
+        summary: "Schedule a message for future delivery",
+        description: "Provide either `to` (a user id, for DMs) or `conversationId` (for groups), plus a future `scheduledAt`.",
+        security: auth,
+        requestBody: {
+          required: true,
+          content: json({
+            type: "object",
+            required: ["scheduledAt"],
+            properties: {
+              to: { type: "string", description: "recipient user id (DM)" },
+              conversationId: { type: "string", description: "target group conversation id" },
+              text: { type: "string" },
+              image: { type: "string", description: "base64 data url" },
+              file: { type: "object", properties: { data: { type: "string" }, name: { type: "string" }, size: { type: "integer" }, type: { type: "string" } } },
+              scheduledAt: { type: "string", format: "date-time", description: "must be in the future" },
+            },
+          }),
+        },
+        responses: { 201: ok("Scheduled", ref("ScheduledMessage")), 400: ok("Invalid time or empty message") },
+      },
+    },
+    "/api/messages/scheduled/{id}": {
+      delete: {
+        tags: ["Scheduled"],
+        summary: "Cancel a pending scheduled message",
+        security: auth,
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: ok("Canceled", { type: "object", properties: { canceled: { type: "boolean" } } }), 404: ok("Not found or already sent") },
       },
     },
     "/api/messages/conversation/{conversationId}/members": {

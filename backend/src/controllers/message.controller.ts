@@ -3,6 +3,7 @@ import mongoose, { type Types } from "mongoose";
 import User from "../models/user.model.js";
 import Message, { type IMessage } from "../models/message.model.js";
 import Conversation, { getOrCreateDirect } from "../models/conversation.model.js";
+import ScheduledMessage from "../models/scheduledMessage.model.js";
 import Report from "../models/report.model.js";
 import cloudinary from "../lib/cloudinary.js";
 import { io, userRoom, getOnlineUserIds } from "../lib/socket.js";
@@ -136,6 +137,7 @@ export const getConversations: RequestHandler = async (req, res, next) => {
       unread: c.unread?.get(myId) ?? 0,
       isMuted: c.mutedBy?.some((id) => String(id) === myId) ?? false,
       isArchived: c.archivedBy?.some((id) => String(id) === myId) ?? false,
+      isPinned: c.pinnedBy?.some((id) => String(id) === myId) ?? false,
       isAdmin: c.admins?.some((id) => String(id) === myId) ?? false,
       disappearMinutes: c.disappearMinutes ?? 0,
     }));
@@ -823,6 +825,26 @@ export const toggleArchive: RequestHandler = async (req, res, next) => {
   }
 };
 
+export const togglePin: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const { conversationId } = req.params;
+    const conv = await Conversation.findById(conversationId);
+    if (!conv) return void res.status(404).json({ message: "Conversation not found" });
+    if (!conv.participants.map(String).includes(myId))
+      return void res.status(403).json({ message: "Not a participant" });
+
+    const pinned = conv.pinnedBy.some((id) => String(id) === myId);
+    await Conversation.updateOne(
+      { _id: conv._id },
+      pinned ? { $pull: { pinnedBy: myId } } : { $addToSet: { pinnedBy: myId } }
+    );
+    res.status(200).json({ isPinned: !pinned });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const setDisappearing: RequestHandler = async (req, res, next) => {
   try {
     const myId = String(req.user!._id);
@@ -838,6 +860,93 @@ export const setDisappearing: RequestHandler = async (req, res, next) => {
     await conv.save();
     await emitConversationUpdated(conv._id);
     res.status(200).json({ disappearMinutes: conv.disappearMinutes ?? 0 });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ---- scheduled messages ----
+
+export const scheduleMessage: RequestHandler = async (req, res, next) => {
+  try {
+    const senderId = req.user!._id;
+    const { to, conversationId, text, image, file, scheduledAt } = req.body;
+
+    const when = new Date(scheduledAt);
+    if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) {
+      return void res.status(400).json({ message: "Pick a time in the future" });
+    }
+    if (!text?.trim() && !image && !file?.data) {
+      return void res.status(400).json({ message: "Message cannot be empty" });
+    }
+
+    // resolve the target: a group by id, or a DM by recipient id
+    let conv;
+    let receiverId: string | undefined;
+    if (conversationId) {
+      conv = await Conversation.findById(conversationId);
+      if (!conv) return void res.status(404).json({ message: "Conversation not found" });
+      if (!conv.participants.map(String).includes(String(senderId)))
+        return void res.status(403).json({ message: "Not a participant" });
+    } else if (to) {
+      if (await blockedBetween(String(senderId), String(to)))
+        return void res.status(403).json({ message: "You can't message this user" });
+      conv = await getOrCreateDirect(senderId, String(to));
+      receiverId = String(to);
+    } else {
+      return void res.status(400).json({ message: "A recipient is required" });
+    }
+
+    // upload media up-front so heavy base64 isn't parked in the DB until send
+    let imageUrl: string | undefined;
+    if (image) imageUrl = (await cloudinary.uploader.upload(image)).secure_url;
+    let fileDoc;
+    if (file?.data) {
+      const up = await cloudinary.uploader.upload(file.data, { resource_type: "auto" });
+      fileDoc = { url: up.secure_url, name: file.name || "file", size: file.size || 0, type: file.type || "" };
+    }
+
+    const scheduled = await new ScheduledMessage({
+      senderId,
+      conversationId: conv._id,
+      receiverId,
+      text: text?.trim(),
+      image: imageUrl,
+      file: fileDoc,
+      scheduledAt: when,
+    }).save();
+
+    res.status(201).json(scheduled);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getScheduledMessages: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = req.user!._id;
+    const items = await ScheduledMessage.find({ senderId: myId, status: "pending" })
+      .sort({ scheduledAt: 1 })
+      .populate("receiverId", "fullName username profilePic")
+      .populate("conversationId", "name isGroup")
+      .lean();
+    res.status(200).json(items);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const cancelScheduledMessage: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = req.user!._id;
+    const { id } = req.params;
+    const result = await ScheduledMessage.updateOne(
+      { _id: id, senderId: myId, status: "pending" },
+      { $set: { status: "canceled" } }
+    );
+    if (result.matchedCount === 0)
+      return void res.status(404).json({ message: "Not found or already sent" });
+    res.status(200).json({ canceled: true });
   } catch (error) {
     next(error);
   }

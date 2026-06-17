@@ -185,9 +185,13 @@ export const useChatStore = create((set, get) => ({
 
     socket.on("newMessage", (msg) => {
       const sel = get().selectedUser;
+      const myId = useAuthStore.getState().authUser?._id;
+      const mine = msg.senderId === myId; // my own message echoed back (scheduled / other device)
       const isDM = Boolean(msg.receiverId);
+      // the "other party" of a DM is the receiver when I sent it, else the sender
+      const peerId = isDM ? (mine ? msg.receiverId : msg.senderId) : null;
       const isOpen =
-        !!sel && (sel.isGroup ? msg.conversationId === sel._id : isDM && msg.senderId === sel._id);
+        !!sel && (sel.isGroup ? msg.conversationId === sel._id : peerId === sel._id);
 
       if (isOpen) {
         set({
@@ -196,13 +200,16 @@ export const useChatStore = create((set, get) => ({
           isRecordingPeer: false,
         });
         get().touchConversation(msg.conversationId); // move chat to top
-        if (!sel.isGroup) get().markMessagesRead(); // read implies delivered
+        if (!mine && !sel.isGroup) get().markMessagesRead(); // read implies delivered
+      } else if (mine) {
+        get().touchConversation(msg.conversationId); // my own send from elsewhere — no unread
       } else {
         get().bumpUnread(msg.conversationId);
         if (isDM) socket.emit("markDelivered", { to: msg.senderId }); // tell the sender
       }
 
-      if (typeof document !== "undefined" && (document.hidden || !isOpen)) get().notify(msg);
+      // never notify for my own messages
+      if (!mine && typeof document !== "undefined" && (document.hidden || !isOpen)) get().notify(msg);
     });
 
     socket.on("conversationCreated", (conversation) => {
@@ -412,6 +419,57 @@ export const useChatStore = create((set, get) => ({
       toast.success(res.data.isArchived ? "Archived" : "Unarchived");
     } catch {
       toast.error("Failed to archive");
+    }
+  },
+
+  togglePin: async (conversationId) => {
+    try {
+      const res = await axiosInstance.post(`/messages/conversation/${conversationId}/pin`);
+      set({
+        conversations: get().conversations.map((c) =>
+          c._id === conversationId ? { ...c, isPinned: res.data.isPinned } : c
+        ),
+      });
+      toast.success(res.data.isPinned ? "Pinned to top" : "Unpinned");
+    } catch {
+      toast.error("Failed to pin");
+    }
+  },
+
+  // ---- scheduled messages ----
+  getScheduled: async () => {
+    try {
+      const res = await axiosInstance.get("/messages/scheduled");
+      return res.data;
+    } catch {
+      return [];
+    }
+  },
+
+  scheduleMessage: async ({ text, image, file, scheduledAt }) => {
+    const { selectedUser } = get();
+    if (!selectedUser) return false;
+    const target = selectedUser.isGroup
+      ? { conversationId: selectedUser._id }
+      : { to: selectedUser._id };
+    try {
+      await axiosInstance.post("/messages/scheduled", { ...target, text, image, file, scheduledAt });
+      toast.success("Message scheduled");
+      return true;
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to schedule");
+      return false;
+    }
+  },
+
+  cancelScheduled: async (id) => {
+    try {
+      await axiosInstance.delete(`/messages/scheduled/${id}`);
+      toast.success("Scheduled message canceled");
+      return true;
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to cancel");
+      return false;
     }
   },
 
