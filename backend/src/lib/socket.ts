@@ -62,9 +62,16 @@ const userRoom = (userId: string) => `user:${userId}`;
 
 export async function getOnlineUserIds(): Promise<string[]> {
   const adapter = io.of("/").adapter as unknown as {
-    allRooms(): Promise<Set<string>>;
+    allRooms?: () => Promise<Set<string>>; // Redis adapter only — cluster-wide
+    rooms?: Map<string, Set<string>>; // in-memory adapter — local node
   };
-  const rooms = await adapter.allRooms();
+  // Use the Redis adapter's cluster-wide allRooms() when present; otherwise fall
+  // back to the in-memory adapter's local `rooms` Map (single-node deploys have
+  // no allRooms()
+  const rooms =
+    typeof adapter.allRooms === "function"
+      ? await adapter.allRooms()
+      : new Set<string>(adapter.rooms ? adapter.rooms.keys() : []);
   return [...rooms].filter((r) => r.startsWith("user:")).map((r) => r.slice(5));
 }
 
