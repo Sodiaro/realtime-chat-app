@@ -55,7 +55,22 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(helmet());
+// Default helmet CSP only allows images/media from 'self' + data:, which blocks
+// Cloudinary-hosted images/voice notes, link-preview images (any https host),
+// and the OpenStreetMap location embed. Extend the defaults to permit them.
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+        "img-src": ["'self'", "data:", "blob:", "https:"],
+        "media-src": ["'self'", "blob:", "https:"], // Cloudinary audio/video
+        "frame-src": ["'self'", "https://www.openstreetmap.org"], // shared-location maps
+        "connect-src": ["'self'", "https:", "wss:"], // API + Socket.IO
+      },
+    },
+  })
+);
 app.use(express.json({ limit: "12mb" })); // base64 files/images
 app.use(express.urlencoded({ extended: true, limit: "12mb" }));
 app.use(cookieParser());
