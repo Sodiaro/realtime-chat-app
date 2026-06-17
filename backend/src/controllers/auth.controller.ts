@@ -17,6 +17,7 @@ const publicUser = (u: IUser) => ({
   bio: u.bio,
   status: u.status,
   isAdmin: u.isAdmin,
+  privacy: u.privacy,
 });
 
 const genOtp = () => String(Math.floor(100000 + Math.random() * 900000));
@@ -223,6 +224,34 @@ export const updateProfile: RequestHandler = async (req, res, next) => {
 
     const updatedUser = await User.findByIdAndUpdate(userId, update, { new: true }).select("-password");
     res.status(200).json(updatedUser);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updatePrivacy: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = req.user!._id;
+    const { lastSeen, readReceipts, profilePhoto } = req.body;
+    const options = ["everyone", "contacts", "nobody"];
+    const set: Record<string, unknown> = {};
+
+    if (lastSeen !== undefined) {
+      if (!options.includes(lastSeen)) return void res.status(400).json({ message: "Invalid lastSeen" });
+      set["privacy.lastSeen"] = lastSeen;
+    }
+    if (profilePhoto !== undefined) {
+      if (!options.includes(profilePhoto)) return void res.status(400).json({ message: "Invalid profilePhoto" });
+      set["privacy.profilePhoto"] = profilePhoto;
+    }
+    if (readReceipts !== undefined) set["privacy.readReceipts"] = Boolean(readReceipts);
+
+    if (Object.keys(set).length === 0) {
+      return void res.status(400).json({ message: "Nothing to update" });
+    }
+
+    const user = await User.findByIdAndUpdate(myId, { $set: set }, { new: true }).select("-password");
+    res.status(200).json(user);
   } catch (error) {
     next(error);
   }

@@ -3,6 +3,7 @@ import { Check, CheckCheck, Pencil, Trash2, SmilePlus, X, Reply, Forward, Pin, F
 import { useChatStore } from "../store/useChatStore";
 import { formatMessageTime } from "../lib/utils";
 import Avatar from "./Avatar";
+import Lightbox from "./Lightbox";
 
 const EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
@@ -25,6 +26,7 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(message.text || "");
   const [showPicker, setShowPicker] = useState(false);
+  const [zoomed, setZoomed] = useState(false);
 
   const isDeleted = Boolean(message.deletedAt);
   const mentionsMe = (message.mentions || []).some((id) => id === authUser._id);
@@ -133,7 +135,18 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
               </div>
             )}
             {message.image && (
-              <img src={message.image} alt="Attachment" className="sm:max-w-[200px] rounded-md mb-2" />
+              <button
+                type="button"
+                onClick={() => setZoomed(true)}
+                className="block mb-2"
+                title="View image"
+              >
+                <img
+                  src={message.image}
+                  alt="Attachment"
+                  className="sm:max-w-[200px] rounded-md cursor-zoom-in hover:opacity-95"
+                />
+              </button>
             )}
             {message.audio && (
               <audio controls src={message.audio} className="max-w-[220px] mb-1" />
@@ -320,6 +333,8 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
           ))}
         </div>
       )}
+
+      {zoomed && <Lightbox src={message.image} onClose={() => setZoomed(false)} />}
     </div>
   );
 };

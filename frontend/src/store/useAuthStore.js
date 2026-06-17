@@ -124,6 +124,16 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
+  updatePrivacy: async (changes) => {
+    try {
+      const res = await axiosInstance.post("/auth/privacy", changes);
+      set({ authUser: res.data });
+      toast.success("Privacy updated");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update privacy");
+    }
+  },
+
   changePassword: async (currentPassword, newPassword) => {
     try {
       await axiosInstance.post("/auth/change-password", { currentPassword, newPassword });

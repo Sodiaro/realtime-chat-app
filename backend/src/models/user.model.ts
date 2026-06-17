@@ -1,5 +1,13 @@
 import mongoose, { Schema, Types } from "mongoose";
 
+export type Visibility = "everyone" | "contacts" | "nobody";
+
+export interface IPrivacy {
+  lastSeen: Visibility;
+  readReceipts: boolean;
+  profilePhoto: Visibility;
+}
+
 export interface IUser {
   _id: Types.ObjectId;
   email: string;
@@ -16,6 +24,7 @@ export interface IUser {
   isVerified: boolean;
   emailOtp?: string; // hashed OTP
   emailOtpExpires?: Date;
+  privacy: IPrivacy;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -74,6 +83,11 @@ const userSchema = new Schema<IUser>(
     },
     emailOtp: { type: String },
     emailOtpExpires: { type: Date },
+    privacy: {
+      lastSeen: { type: String, enum: ["everyone", "contacts", "nobody"], default: "everyone" },
+      readReceipts: { type: Boolean, default: true },
+      profilePhoto: { type: String, enum: ["everyone", "contacts", "nobody"], default: "everyone" },
+    },
   },
   { timestamps: true }
 );

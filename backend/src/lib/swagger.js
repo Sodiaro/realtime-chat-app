@@ -45,6 +45,14 @@ export const openapiSpec = {
           status: { type: "string", nullable: true },
           lastSeen: { type: "string", format: "date-time", nullable: true },
           isAdmin: { type: "boolean" },
+          privacy: {
+            type: "object",
+            properties: {
+              lastSeen: { type: "string", enum: ["everyone", "contacts", "nobody"] },
+              readReceipts: { type: "boolean" },
+              profilePhoto: { type: "string", enum: ["everyone", "contacts", "nobody"] },
+            },
+          },
           createdAt: { type: "string", format: "date-time" },
         },
       },
@@ -288,6 +296,25 @@ export const openapiSpec = {
           409: ok("Username taken", ref("Error")),
           502: ok("Image upload failed", ref("Error")),
         },
+      },
+    },
+    "/api/auth/privacy": {
+      post: {
+        tags: ["Account"],
+        summary: "Update privacy settings (last seen / read receipts / profile photo)",
+        security: auth,
+        requestBody: {
+          required: true,
+          content: json({
+            type: "object",
+            properties: {
+              lastSeen: { type: "string", enum: ["everyone", "contacts", "nobody"] },
+              readReceipts: { type: "boolean" },
+              profilePhoto: { type: "string", enum: ["everyone", "contacts", "nobody"] },
+            },
+          }),
+        },
+        responses: { 200: ok("Updated user", ref("User")), 400: ok("Invalid / nothing to update", ref("Error")) },
       },
     },
     "/api/auth/change-password": {

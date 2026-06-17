@@ -11,7 +11,7 @@ const PREVIEW_MESSAGES = [
 
 const SettingsPage = () => {
   const { theme, setTheme } = useThemeStore();
-  const { authUser, changePassword, logoutAllDevices, deleteAccount } = useAuthStore();
+  const { authUser, changePassword, logoutAllDevices, deleteAccount, updatePrivacy } = useAuthStore();
 
   const [curPw, setCurPw] = useState("");
   const [newPw, setNewPw] = useState("");
@@ -70,6 +70,58 @@ const SettingsPage = () => {
                 Delete account
               </button>
             </div>
+          </div>
+        )}
+
+        {authUser && (
+          <div className="rounded-xl border border-base-300 p-5 space-y-4">
+            <div>
+              <h2 className="text-lg font-semibold">Privacy</h2>
+              <p className="text-sm text-base-content/70">Control what other people can see.</p>
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <label className="flex flex-col gap-1">
+                <span className="text-sm font-medium">Last seen</span>
+                <select
+                  className="select select-bordered select-sm"
+                  value={authUser.privacy?.lastSeen || "everyone"}
+                  onChange={(e) => updatePrivacy({ lastSeen: e.target.value })}
+                >
+                  <option value="everyone">Everyone</option>
+                  <option value="contacts">My contacts</option>
+                  <option value="nobody">Nobody</option>
+                </select>
+              </label>
+
+              <label className="flex flex-col gap-1">
+                <span className="text-sm font-medium">Profile photo</span>
+                <select
+                  className="select select-bordered select-sm"
+                  value={authUser.privacy?.profilePhoto || "everyone"}
+                  onChange={(e) => updatePrivacy({ profilePhoto: e.target.value })}
+                >
+                  <option value="everyone">Everyone</option>
+                  <option value="contacts">My contacts</option>
+                  <option value="nobody">Nobody</option>
+                </select>
+              </label>
+            </div>
+
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                className="toggle toggle-primary toggle-sm"
+                checked={authUser.privacy?.readReceipts !== false}
+                onChange={(e) => updatePrivacy({ readReceipts: e.target.checked })}
+              />
+              <div>
+                <div className="text-sm font-medium">Read receipts</div>
+                <div className="text-xs opacity-60">
+                  When off, others won't see when you've read their messages.
+                </div>
+              </div>
+            </label>
           </div>
         )}
 

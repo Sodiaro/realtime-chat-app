@@ -12,6 +12,7 @@ import {
   checkUsername,
   verifyEmail,
   resendOtp,
+  updatePrivacy,
 } from "../controllers/auth.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
 import { authLimiter } from "../middleware/rateLimit.js";
@@ -25,6 +26,7 @@ router.post("/resend-otp", authLimiter, resendOtp);
 router.post("/login", authLimiter, login);
 router.post("/logout", logout);
 router.put("/update-profile", protectRoute, updateProfile);
+router.post("/privacy", protectRoute, updatePrivacy);
 router.get("/check", protectRoute, checkAuth);
 router.post("/block/:id", protectRoute, blockUser);
 router.post("/change-password", protectRoute, changePassword);

@@ -106,18 +106,31 @@ io.on("connection", async (socket) => {
   // receiver opened/viewed the chat → stamp readAt (+ delivered) and tell the sender
   socket.on("markRead", async ({ to }) => {
     if (typeof to !== "string") return;
+    const me = await User.findById(userId).select("privacy").lean();
     const conv = await getOrCreateDirect(userId, to);
-    const readAt = new Date();
+    const now = new Date();
+
+    // read receipts disabled: clear my unread + mark delivered, but never reveal "seen"
+    if (me?.privacy?.readReceipts === false) {
+      await Message.updateMany(
+        { conversationId: conv._id, receiverId: userId, deliveredAt: { $exists: false } },
+        { $set: { deliveredAt: now } }
+      );
+      await Conversation.updateOne({ _id: conv._id }, { $set: { [`unread.${userId}`]: 0 } });
+      io.to(userRoom(to)).emit("messagesDelivered", { by: userId, conversationId: String(conv._id) });
+      return;
+    }
+
     const result = await Message.updateMany(
       { conversationId: conv._id, receiverId: userId, readAt: { $exists: false } },
-      { $set: { readAt, deliveredAt: readAt } }
+      { $set: { readAt: now, deliveredAt: now } }
     );
     if (result.modifiedCount === 0) return; // nothing new to acknowledge
     await Conversation.updateOne({ _id: conv._id }, { $set: { [`unread.${userId}`]: 0 } });
     io.to(userRoom(to)).emit("messagesRead", {
       by: userId,
       conversationId: String(conv._id),
-      readAt: readAt.toISOString(),
+      readAt: now.toISOString(),
     });
   });
 

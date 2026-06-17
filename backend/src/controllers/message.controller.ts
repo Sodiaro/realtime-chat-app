@@ -110,23 +110,42 @@ const notExpired = () => ({
 const computeExpiry = (minutes?: number) =>
   minutes && minutes > 0 ? new Date(Date.now() + minutes * 60_000) : undefined;
 
+// hide a user's last-seen / profile photo based on their privacy settings.
+// `isContact` is true when the viewer shares a DM with them.
+type Vis = "everyone" | "contacts" | "nobody";
+interface PrivacyView {
+  profilePic?: string;
+  lastSeen?: unknown;
+  privacy?: { lastSeen?: Vis; profilePhoto?: Vis };
+}
+const visibleTo = (setting: Vis | undefined, isContact: boolean) =>
+  !setting || setting === "everyone" || (setting === "contacts" && isContact);
+
+function applyPrivacy<T extends PrivacyView>(u: T, isContact: boolean): T {
+  const out: T = { ...u };
+  if (!visibleTo(out.privacy?.lastSeen, isContact)) delete (out as PrivacyView).lastSeen;
+  if (!visibleTo(out.privacy?.profilePhoto, isContact)) (out as PrivacyView).profilePic = "";
+  delete (out as PrivacyView).privacy;
+  return out;
+}
+
 // only people the user has actually talked to (their DM contacts)
 export const getUsersForSidebar: RequestHandler = async (req, res, next) => {
   try {
     const myId = String(req.user!._id);
     const convs = await Conversation.find({ isGroup: false, participants: myId })
-      .populate("participants", "fullName username profilePic bio status lastSeen")
+      .populate("participants", "fullName username profilePic bio status lastSeen privacy")
       .lean();
 
     const seen = new Set<string>();
     const contacts: unknown[] = [];
     for (const c of convs) {
-      const peer = (c.participants as { _id: Types.ObjectId }[]).find(
+      const peer = (c.participants as ({ _id: Types.ObjectId } & PrivacyView)[]).find(
         (p) => String(p._id) !== myId
       );
       if (peer && !seen.has(String(peer._id))) {
         seen.add(String(peer._id));
-        contacts.push(peer);
+        contacts.push(applyPrivacy(peer, true)); // they're a DM contact
       }
     }
     res.status(200).json(contacts);
@@ -151,10 +170,11 @@ export const searchUsers: RequestHandler = async (req, res, next) => {
         { fullName: { $regex: q, $options: "i" } },
       ],
     })
-      .select("fullName username profilePic bio status lastSeen")
+      .select("fullName username profilePic bio status lastSeen privacy")
       .limit(20)
       .lean();
-    res.status(200).json(users);
+    // search reaches strangers, so only "everyone" visibility is exposed here
+    res.status(200).json(users.map((u) => applyPrivacy(u as PrivacyView, false)));
   } catch (error) {
     next(error);
   }
