@@ -182,6 +182,21 @@ export const useChatStore = create((set, get) => ({
     socket.off("conversationCreated");
     socket.off("conversationUpdated");
     socket.off("messagesDelivered");
+    socket.off("groupMessagesRead");
+
+    // a group member read messages → add them to readBy of the open group's messages
+    socket.on("groupMessagesRead", ({ conversationId, userId }) => {
+      const sel = get().selectedUser;
+      if (!sel?.isGroup || sel._id !== conversationId) return;
+      const myId = useAuthStore.getState().authUser?._id;
+      set({
+        messages: get().messages.map((m) =>
+          m.senderId === myId && !(m.readBy || []).includes(userId)
+            ? { ...m, readBy: [...(m.readBy || []), userId] }
+            : m
+        ),
+      });
+    });
 
     socket.on("newMessage", (msg) => {
       const sel = get().selectedUser;
@@ -222,6 +237,9 @@ export const useChatStore = create((set, get) => ({
       set((state) => {
         const merge = {
           name: conv.name,
+          avatar: conv.avatar,
+          description: conv.description,
+          onlyAdminsCanMessage: conv.onlyAdminsCanMessage ?? false,
           participants: conv.participants,
           admins: conv.admins,
           disappearMinutes: conv.disappearMinutes ?? 0,
@@ -260,6 +278,7 @@ export const useChatStore = create((set, get) => ({
     socket.off("conversationCreated");
     socket.off("conversationUpdated");
     socket.off("messagesDelivered");
+    socket.off("groupMessagesRead");
   },
 
   // increment a conversation's unread count + bump its activity time
@@ -487,6 +506,49 @@ export const useChatStore = create((set, get) => ({
       await axiosInstance.patch(`/messages/conversation/${conversationId}`, { name });
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to rename");
+    }
+  },
+
+  // update group photo / description / posting permission (admins only)
+  updateGroupInfo: async (conversationId, changes) => {
+    try {
+      await axiosInstance.patch(`/messages/conversation/${conversationId}`, changes);
+      toast.success("Group updated");
+      return true;
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update group");
+      return false;
+    }
+  },
+
+  setGroupAdmin: async (conversationId, userId, makeAdmin) => {
+    try {
+      await axiosInstance.post(`/messages/conversation/${conversationId}/admin`, { userId, makeAdmin });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update admin");
+    }
+  },
+
+  createInvite: async (conversationId, rotate = false) => {
+    try {
+      const res = await axiosInstance.post(
+        `/messages/conversation/${conversationId}/invite`,
+        {},
+        { params: rotate ? { rotate: 1 } : {} }
+      );
+      return res.data.inviteCode;
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to create invite");
+      return null;
+    }
+  },
+
+  revokeInvite: async (conversationId) => {
+    try {
+      await axiosInstance.delete(`/messages/conversation/${conversationId}/invite`);
+      toast.success("Invite link disabled");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to revoke invite");
     }
   },
 

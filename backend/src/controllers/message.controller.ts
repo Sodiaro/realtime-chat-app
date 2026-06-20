@@ -1,4 +1,5 @@
 import type { RequestHandler } from "express";
+import crypto from "crypto";
 import mongoose, { type Types } from "mongoose";
 import User from "../models/user.model.js";
 import Message, { type IMessage } from "../models/message.model.js";
@@ -195,6 +196,9 @@ export const getConversations: RequestHandler = async (req, res, next) => {
       participants: c.participants,
       isGroup: c.isGroup,
       name: c.name,
+      avatar: c.avatar,
+      description: c.description,
+      onlyAdminsCanMessage: c.onlyAdminsCanMessage ?? false,
       admins: c.admins,
       lastMessage: c.lastMessage,
       lastMessageAt: c.lastMessageAt,
@@ -715,7 +719,7 @@ export const reportMessage: RequestHandler = async (req, res, next) => {
   }
 };
 
-// ---- group chats ----
+// group chats
 
 export const createGroup: RequestHandler = async (req, res, next) => {
   try {
@@ -767,6 +771,22 @@ export const getConversationMessages: RequestHandler = async (req, res, next) =>
       return;
     }
 
+    // group read receipts: record that I've now read everyone else's messages
+    const read = await Message.updateMany(
+      { conversationId, senderId: { $ne: myId }, readBy: { $ne: myId } },
+      { $addToSet: { readBy: myId } }
+    );
+    if (read.modifiedCount > 0) {
+      for (const p of conversation.participants.map(String)) {
+        if (p !== String(myId)) {
+          io.to(userRoom(p)).emit("groupMessagesRead", {
+            conversationId: String(conversation._id),
+            userId: String(myId),
+          });
+        }
+      }
+    }
+
     const limit = Math.min(Number(req.query.limit) || 30, 100);
     const query: Record<string, unknown> = { conversationId, ...notExpired() };
     if (req.query.cursor) query.createdAt = { $lt: new Date(String(req.query.cursor)) };
@@ -813,6 +833,11 @@ export const sendToConversation: RequestHandler = async (req, res, next) => {
     const participants = conversation.participants.map(String);
     if (!participants.includes(String(senderId))) {
       res.status(403).json({ message: "Not a participant" });
+      return;
+    }
+    // admins-only posting (group setting)
+    if (conversation.onlyAdminsCanMessage && !conversation.admins.map(String).includes(String(senderId))) {
+      res.status(403).json({ message: "Only admins can post in this group" });
       return;
     }
 
@@ -883,7 +908,7 @@ async function emitConversationUpdated(conversationId: Types.ObjectId) {
   }
 }
 
-// ---- mute / archive (per user) ----
+// mute / archive (per user)
 
 export const toggleMute: RequestHandler = async (req, res, next) => {
   try {
@@ -965,7 +990,7 @@ export const setDisappearing: RequestHandler = async (req, res, next) => {
   }
 };
 
-// ---- scheduled messages ----
+// scheduled messages
 
 export const scheduleMessage: RequestHandler = async (req, res, next) => {
   try {
@@ -1052,7 +1077,7 @@ export const cancelScheduledMessage: RequestHandler = async (req, res, next) => 
   }
 };
 
-// ---- starred messages ----
+// starred messages
 
 export const starMessage: RequestHandler = async (req, res, next) => {
   try {
@@ -1090,25 +1115,150 @@ export const getStarred: RequestHandler = async (req, res, next) => {
   }
 };
 
-// ---- group management ----
+// group management
 
+// update group name / description / photo / posting permission (admins only)
 export const renameGroup: RequestHandler = async (req, res, next) => {
   try {
     const myId = String(req.user!._id);
     const { conversationId } = req.params;
-    const { name } = req.body;
-    if (!name || !String(name).trim())
-      return void res.status(400).json({ message: "Name is required" });
+    const { name, description, avatar, onlyAdminsCanMessage } = req.body;
 
     const conv = await Conversation.findById(conversationId);
     if (!conv || !conv.isGroup) return void res.status(404).json({ message: "Group not found" });
     if (!conv.admins.map(String).includes(myId))
       return void res.status(403).json({ message: "Admins only" });
 
-    conv.name = String(name).trim();
+    if (name !== undefined) {
+      if (!String(name).trim()) return void res.status(400).json({ message: "Name can't be empty" });
+      conv.name = String(name).trim();
+    }
+    if (description !== undefined) conv.description = String(description).slice(0, 500);
+    if (onlyAdminsCanMessage !== undefined) conv.onlyAdminsCanMessage = Boolean(onlyAdminsCanMessage);
+    if (avatar) conv.avatar = (await cloudinary.uploader.upload(avatar)).secure_url;
+
     await conv.save();
     await emitConversationUpdated(conv._id);
     res.status(200).json(conv);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// promote/demote a member to admin (admins only)
+export const setGroupAdmin: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const { conversationId } = req.params;
+    const { userId, makeAdmin } = req.body;
+
+    const conv = await Conversation.findById(conversationId);
+    if (!conv || !conv.isGroup) return void res.status(404).json({ message: "Group not found" });
+    if (!conv.admins.map(String).includes(myId))
+      return void res.status(403).json({ message: "Admins only" });
+    if (!conv.participants.map(String).includes(String(userId)))
+      return void res.status(400).json({ message: "Not a member" });
+
+    if (makeAdmin) {
+      if (!conv.admins.map(String).includes(String(userId)))
+        conv.admins.push(userId as unknown as Types.ObjectId);
+    } else {
+      if (conv.admins.length <= 1)
+        return void res.status(400).json({ message: "A group needs at least one admin" });
+      conv.admins = conv.admins.filter((a) => String(a) !== String(userId));
+    }
+    await conv.save();
+    await emitConversationUpdated(conv._id);
+    res.status(200).json(conv);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// invite links
+
+const genInviteCode = () => crypto.randomBytes(6).toString("base64url"); // ~8 url-safe chars
+
+export const createInvite: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const { conversationId } = req.params;
+    const conv = await Conversation.findById(conversationId);
+    if (!conv || !conv.isGroup) return void res.status(404).json({ message: "Group not found" });
+    if (!conv.admins.map(String).includes(myId))
+      return void res.status(403).json({ message: "Admins only" });
+
+    // create the code, or rotate it when ?rotate=1 (invalidates the old link)
+    if (!conv.inviteCode || req.query.rotate) {
+      conv.inviteCode = genInviteCode();
+      await conv.save();
+    }
+    res.status(200).json({ inviteCode: conv.inviteCode });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const revokeInvite: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const { conversationId } = req.params;
+    const conv = await Conversation.findById(conversationId);
+    if (!conv || !conv.isGroup) return void res.status(404).json({ message: "Group not found" });
+    if (!conv.admins.map(String).includes(myId))
+      return void res.status(403).json({ message: "Admins only" });
+
+    conv.inviteCode = undefined;
+    await conv.save();
+    res.status(200).json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// preview a group from an invite code (before joining)
+export const getInvitePreview: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const { code } = req.params;
+    const conv = await Conversation.findOne({ inviteCode: code, isGroup: true })
+      .select("name avatar description participants")
+      .lean();
+    if (!conv) return void res.status(404).json({ message: "Invalid or expired invite" });
+    res.status(200).json({
+      _id: conv._id,
+      name: conv.name,
+      avatar: conv.avatar,
+      description: conv.description,
+      memberCount: conv.participants.length,
+      isMember: conv.participants.map(String).includes(myId),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const joinByInvite: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = req.user!._id;
+    const { code } = req.params;
+    const conv = await Conversation.findOne({ inviteCode: code, isGroup: true });
+    if (!conv) return void res.status(404).json({ message: "Invalid or expired invite" });
+
+    const already = conv.participants.map(String).includes(String(myId));
+    if (!already) {
+      conv.participants.push(myId);
+      await conv.save();
+    }
+    const populated = await Conversation.findById(conv._id).populate("participants", "-password");
+    if (!already && populated) {
+      io.to(userRoom(String(myId))).emit("conversationCreated", populated);
+      for (const p of populated.participants) {
+        const pid = String((p as { _id?: unknown })._id ?? p);
+        if (pid !== String(myId)) io.to(userRoom(pid)).emit("conversationUpdated", populated);
+      }
+    }
+    res.status(200).json(populated);
   } catch (error) {
     next(error);
   }

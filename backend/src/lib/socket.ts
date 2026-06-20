@@ -19,6 +19,7 @@ interface ServerToClientEvents {
   recording: (payload: { from: string; isRecording: boolean }) => void;
   messagesRead: (payload: { by: string; conversationId: string; readAt: string }) => void;
   messagesDelivered: (payload: { by: string; conversationId: string }) => void;
+  groupMessagesRead: (payload: { conversationId: string; userId: string }) => void;
   messageUpdated: (message: IMessage) => void;
   conversationCreated: (conversation: IConversation) => void;
   conversationUpdated: (conversation: IConversation) => void;

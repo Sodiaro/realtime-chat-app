@@ -107,6 +107,7 @@ export const openapiSpec = {
           expiresAt: { type: "string", format: "date-time", nullable: true, description: "disappearing messages" },
           deliveredAt: { type: "string", format: "date-time", nullable: true },
           readAt: { type: "string", format: "date-time", nullable: true },
+          readBy: { type: "array", items: ID, description: "group read receipts" },
           editedAt: { type: "string", format: "date-time", nullable: true },
           deletedAt: { type: "string", format: "date-time", nullable: true },
           pinnedAt: { type: "string", format: "date-time", nullable: true },
@@ -126,8 +127,11 @@ export const openapiSpec = {
           _id: ID,
           isGroup: { type: "boolean" },
           name: { type: "string", nullable: true },
+          avatar: { type: "string", nullable: true },
+          description: { type: "string", nullable: true },
           participants: arrayOf("User"),
           admins: { type: "array", items: ID },
+          onlyAdminsCanMessage: { type: "boolean" },
           lastMessage: ref("Message"),
           lastMessageAt: { type: "string", format: "date-time", nullable: true },
           unread: { type: "integer" },
@@ -607,11 +611,75 @@ export const openapiSpec = {
       },
       patch: {
         tags: ["Conversations"],
-        summary: "Rename a group (admins only)",
+        summary: "Update group name / description / photo / posting permission (admins only)",
         security: auth,
         parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }],
-        requestBody: { required: true, content: json({ type: "object", required: ["name"], properties: { name: { type: "string" } } }) },
-        responses: { 200: ok("Renamed", ref("Conversation")), 403: ok("Admins only") },
+        requestBody: {
+          required: true,
+          content: json({
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              description: { type: "string", maxLength: 500 },
+              avatar: { type: "string", description: "base64 data URL" },
+              onlyAdminsCanMessage: { type: "boolean" },
+            },
+          }),
+        },
+        responses: { 200: ok("Updated group", ref("Conversation")), 403: ok("Admins only") },
+      },
+    },
+    "/api/messages/conversation/{conversationId}/admin": {
+      post: {
+        tags: ["Conversations"],
+        summary: "Promote/demote a member to admin (admins only)",
+        security: auth,
+        parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: json({ type: "object", required: ["userId", "makeAdmin"], properties: { userId: { type: "string" }, makeAdmin: { type: "boolean" } } }),
+        },
+        responses: { 200: ok("Updated group", ref("Conversation")), 400: ok("Needs at least one admin"), 403: ok("Admins only") },
+      },
+    },
+    "/api/messages/conversation/{conversationId}/invite": {
+      post: {
+        tags: ["Conversations"],
+        summary: "Create (or rotate with ?rotate=1) the group invite link (admins only)",
+        security: auth,
+        parameters: [
+          { name: "conversationId", in: "path", required: true, schema: { type: "string" } },
+          { name: "rotate", in: "query", required: false, schema: { type: "string" } },
+        ],
+        responses: { 200: ok("Invite code", { type: "object", properties: { inviteCode: { type: "string" } } }), 403: ok("Admins only") },
+      },
+      delete: {
+        tags: ["Conversations"],
+        summary: "Disable the group invite link (admins only)",
+        security: auth,
+        parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: ok("Revoked"), 403: ok("Admins only") },
+      },
+    },
+    "/api/messages/invite/{code}": {
+      get: {
+        tags: ["Conversations"],
+        summary: "Preview a group from an invite code",
+        security: auth,
+        parameters: [{ name: "code", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          200: ok("Group preview", { type: "object", properties: { _id: ID, name: { type: "string" }, avatar: { type: "string", nullable: true }, description: { type: "string", nullable: true }, memberCount: { type: "integer" }, isMember: { type: "boolean" } } }),
+          404: ok("Invalid or expired invite"),
+        },
+      },
+    },
+    "/api/messages/invite/{code}/join": {
+      post: {
+        tags: ["Conversations"],
+        summary: "Join a group via an invite code",
+        security: auth,
+        parameters: [{ name: "code", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: ok("Joined group", ref("Conversation")), 404: ok("Invalid or expired invite") },
       },
     },
     "/api/messages/conversation/{conversationId}/mute": {

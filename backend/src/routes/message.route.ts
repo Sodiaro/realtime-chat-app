@@ -31,6 +31,11 @@ import {
   addGroupMembers,
   removeGroupMember,
   leaveGroup,
+  setGroupAdmin,
+  createInvite,
+  revokeInvite,
+  getInvitePreview,
+  joinByInvite,
 } from "../controllers/message.controller.js";
 
 const router = express.Router();
@@ -46,6 +51,10 @@ router.get("/scheduled", protectRoute, getScheduledMessages);
 router.post("/scheduled", protectRoute, scheduleMessage);
 router.delete("/scheduled/:id", protectRoute, cancelScheduledMessage);
 
+// group invite links (kept above the generic /:id)
+router.get("/invite/:code", protectRoute, getInvitePreview);
+router.post("/invite/:code/join", protectRoute, joinByInvite);
+
 // group / conversation routes (kept above the generic /:id)
 router.post("/group", protectRoute, createGroup);
 router.get("/conversation/:conversationId", protectRoute, getConversationMessages);
@@ -56,6 +65,9 @@ router.post("/conversation/:conversationId/mute", protectRoute, toggleMute);
 router.post("/conversation/:conversationId/archive", protectRoute, toggleArchive);
 router.post("/conversation/:conversationId/pin", protectRoute, togglePin);
 router.post("/conversation/:conversationId/disappearing", protectRoute, setDisappearing);
+router.post("/conversation/:conversationId/admin", protectRoute, setGroupAdmin);
+router.post("/conversation/:conversationId/invite", protectRoute, createInvite);
+router.delete("/conversation/:conversationId/invite", protectRoute, revokeInvite);
 router.post("/conversation/:conversationId/members", protectRoute, addGroupMembers);
 router.delete("/conversation/:conversationId/members/:userId", protectRoute, removeGroupMember);
 router.post("/conversation/:conversationId/leave", protectRoute, leaveGroup);

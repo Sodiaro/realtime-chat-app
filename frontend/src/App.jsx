@@ -12,6 +12,7 @@ import StarredPage from "./pages/StarredPage";
 import CallsPage from "./pages/CallsPage";
 import ScheduledPage from "./pages/ScheduledPage";
 import SearchPage from "./pages/SearchPage";
+import JoinGroupPage from "./pages/JoinGroupPage";
 
 import { useAuthStore } from "./store/useAuthStore";
 import { useChatStore } from "./store/useChatStore";
@@ -90,6 +91,7 @@ const App = () => {
         <Route path="/calls" element={authUser ? <CallsPage /> : <Navigate to="/login" />} />
         <Route path="/scheduled" element={authUser ? <ScheduledPage /> : <Navigate to="/login" />} />
         <Route path="/search" element={authUser ? <SearchPage /> : <Navigate to="/login" />} />
+        <Route path="/join/:code" element={authUser ? <JoinGroupPage /> : <Navigate to="/login" />} />
       </Routes>
 
       <CallOverlay />

@@ -62,9 +62,13 @@ const ChatHeader = () => {
           onClick={() => !isGroup && setShowProfile(true)}
         >
           {isGroup ? (
-            <div className="size-10 rounded-full grid place-items-center bg-base-300">
-              <Users className="size-5" />
-            </div>
+            selectedUser.avatar ? (
+              <img src={selectedUser.avatar} alt="" className="size-10 rounded-full object-cover" />
+            ) : (
+              <div className="size-10 rounded-full grid place-items-center bg-base-300">
+                <Users className="size-5" />
+              </div>
+            )
           ) : (
             <Avatar user={selectedUser} size="size-10" />
           )}

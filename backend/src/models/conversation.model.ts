@@ -6,7 +6,11 @@ export interface IConversation {
   participants: Types.ObjectId[];
   isGroup: boolean;
   name?: string; // group name
+  avatar?: string; // group photo (cloudinary url)
+  description?: string; // group description
   admins: Types.ObjectId[]; // group admins (creator by default)
+  inviteCode?: string; // join-by-link code (absent = link disabled)
+  onlyAdminsCanMessage?: boolean; // restrict posting to admins
   lastMessage?: Types.ObjectId;
   lastMessageAt?: Date;
   unread: Map<string, number>; // userId -> unread count
@@ -24,7 +28,11 @@ const conversationSchema = new Schema<IConversation>(
     participants: [{ type: Schema.Types.ObjectId, ref: "User", required: true }],
     isGroup: { type: Boolean, default: false },
     name: { type: String },
+    avatar: { type: String },
+    description: { type: String },
     admins: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    inviteCode: { type: String, unique: true, sparse: true },
+    onlyAdminsCanMessage: { type: Boolean, default: false },
     lastMessage: { type: Schema.Types.ObjectId, ref: "Message" },
     lastMessageAt: { type: Date },
     unread: { type: Map, of: Number, default: {} },

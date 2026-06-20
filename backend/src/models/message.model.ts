@@ -59,6 +59,7 @@ export interface IMessage {
   mentions: Types.ObjectId[];
   deliveredAt?: Date;
   readAt?: Date;
+  readBy: Types.ObjectId[]; // group read receipts: who has read this message
   editedAt?: Date;
   deletedAt?: Date;
   pinnedAt?: Date;
@@ -136,6 +137,10 @@ const messageSchema = new Schema<IMessage>(
     },
     readAt: {
       type: Date,
+    },
+    readBy: {
+      type: [{ type: Schema.Types.ObjectId, ref: "User" }],
+      default: [],
     },
     editedAt: {
       type: Date,

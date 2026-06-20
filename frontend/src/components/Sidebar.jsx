@@ -85,9 +85,13 @@ const Sidebar = () => {
         selectedUser?._id === c._id ? "bg-primary/10" : ""
       }`}
     >
-      <div className="size-12 rounded-full bg-base-300 grid place-items-center shrink-0">
-        <UsersRound className="size-6" />
-      </div>
+      {c.avatar ? (
+        <img src={c.avatar} alt="" className="size-12 rounded-full object-cover shrink-0" />
+      ) : (
+        <div className="size-12 rounded-full bg-base-300 grid place-items-center shrink-0">
+          <UsersRound className="size-6" />
+        </div>
+      )}
       <div className="flex items-center w-full text-left min-w-0 gap-1">
         <div className="min-w-0">
           <div className="font-medium truncate">{c.name}</div>

@@ -36,6 +36,13 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
   const isGroup = selectedUser.isGroup;
   // in a group, the other messages can be from any member
   const sender = isGroup && !isOwn ? (users || []).find((u) => u._id === message.senderId) : null;
+
+  // group read receipts: who (besides me) has read my own message
+  const nameFor = (id) => {
+    const p = (selectedUser.participants || []).find((x) => (x?._id || x) === id);
+    return p?.fullName || (users || []).find((u) => u._id === id)?.fullName || "Member";
+  };
+  const readers = isOwn && isGroup ? (message.readBy || []).filter((id) => id !== authUser._id) : [];
   const avatar = isOwn
     ? authUser.profilePic
     : isGroup
@@ -88,6 +95,7 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
         <time className="text-xs opacity-50 ml-1">{formatMessageTime(message.createdAt)}</time>
         {message.editedAt && !isDeleted && <span className="text-xs opacity-40">(edited)</span>}
         {isOwn &&
+          !isGroup &&
           !isDeleted &&
           (message.readAt ? (
             <CheckCheck className="size-3.5 text-sky-500" title="Seen" />
@@ -96,6 +104,11 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
           ) : (
             <Check className="size-3.5 opacity-50" title="Sent" />
           ))}
+        {isOwn && isGroup && !isDeleted && readers.length > 0 && (
+          <span className="text-xs opacity-50 flex items-center gap-0.5" title={`Seen by ${readers.map(nameFor).join(", ")}`}>
+            <CheckCheck className="size-3.5 text-sky-500" /> {readers.length}
+          </span>
+        )}
       </div>
 
       <div

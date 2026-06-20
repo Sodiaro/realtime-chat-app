@@ -42,6 +42,13 @@ const MessageInput = () => {
   const isBlocked =
     !selectedUser?.isGroup && authUser?.blockedUsers?.some((id) => id === selectedUser?._id);
 
+  // in an admins-only group, non-admins can't post
+  const isGroupAdmin = (selectedUser?.admins || []).some(
+    (id) => (id?._id || id) === authUser?._id
+  );
+  const adminsOnlyLocked =
+    selectedUser?.isGroup && selectedUser?.onlyAdminsCanMessage && !isGroupAdmin;
+
   const startTimer = () => {
     timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
   };
@@ -220,6 +227,14 @@ const MessageInput = () => {
     return (
       <div className="p-4 w-full text-center text-sm text-base-content/60">
         You blocked this user. Unblock them from the chat header to send messages.
+      </div>
+    );
+  }
+
+  if (adminsOnlyLocked) {
+    return (
+      <div className="p-4 w-full text-center text-sm text-base-content/60">
+        Only admins can send messages in this group.
       </div>
     );
   }
