@@ -14,6 +14,7 @@ const ChatHeader = () => {
     useChatStore();
   const { onlineUsers, authUser, blockUser } = useAuthStore();
   const isGroup = selectedUser.isGroup;
+  const isSelf = selectedUser.isSelf;
   const isOnline = onlineUsers.includes(selectedUser._id);
   const isBlocked = !isGroup && authUser?.blockedUsers?.some((id) => id === selectedUser._id);
   const [showGroupInfo, setShowGroupInfo] = useState(false);
@@ -23,9 +24,13 @@ const ChatHeader = () => {
   // the conversation backing this chat (groups use their own id; DMs match by participant)
   const conv = isGroup
     ? conversations.find((c) => c._id === selectedUser._id)
-    : conversations.find(
-        (c) => !c.isGroup && c.participants?.some((p) => (p._id || p) === selectedUser._id)
-      );
+    : isSelf
+      ? conversations.find(
+          (c) => !c.isGroup && c.participants?.every((p) => (p._id || p) === selectedUser._id)
+        )
+      : conversations.find(
+          (c) => !c.isGroup && c.participants?.some((p) => (p._id || p) === selectedUser._id)
+        );
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -76,22 +81,29 @@ const ChatHeader = () => {
           )}
 
           <div className="min-w-0">
-            <h3 className="text-lg font-semibold leading-tight truncate">{selectedUser.fullName}</h3>
-            <p className={`text-sm ${isOnline && !isGroup ? "text-success" : "text-base-content/60"}`}>
-              {isGroup
-                ? `${selectedUser.participants?.length || 0} members`
-                : isBlocked
-                  ? "Blocked"
-                  : isOnline
-                    ? "Online"
-                    : formatLastSeen(selectedUser.lastSeen)}
+            <div className="flex items-center gap-1.5 min-w-0">
+              <h3 className="text-lg font-semibold leading-tight truncate">{selectedUser.fullName}</h3>
+              {conv?.disappearMinutes > 0 && (
+                <Timer className="size-4 text-primary shrink-0" title="Disappearing messages are on" />
+              )}
+            </div>
+            <p className={`text-sm ${isOnline && !isGroup && !isSelf ? "text-success" : "text-base-content/60"}`}>
+              {isSelf
+                ? "Message yourself"
+                : isGroup
+                  ? `${selectedUser.participants?.length || 0} members`
+                  : isBlocked
+                    ? "Blocked"
+                    : isOnline
+                      ? "Online"
+                      : formatLastSeen(selectedUser.lastSeen)}
             </p>
           </div>
           </div>
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          {!isGroup && (
+          {!isGroup && !isSelf && (
             <button
               onClick={() => startCall(selectedUser, false)}
               title="Voice call"
@@ -141,7 +153,7 @@ const ChatHeader = () => {
                   </button>
                 </li>
               )}
-              {!isGroup && (
+              {!isGroup && !isSelf && (
                 <li>
                   <button onClick={() => startCall(selectedUser, true)}>
                     <Video className="size-4 shrink-0" /> Video call

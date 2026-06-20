@@ -109,6 +109,15 @@ export const openapiSpec = {
               durationSec: { type: "integer" },
             },
           },
+          system: {
+            type: "object",
+            nullable: true,
+            description: "system notice rendered centered in the timeline",
+            properties: {
+              type: { type: "string", enum: ["disappearing"] },
+              on: { type: "boolean" },
+            },
+          },
           mentions: { type: "array", items: ID },
           replyTo: { oneOf: [ID, ref("Message")], nullable: true },
           forwardedFrom: { ...ID, nullable: true },
@@ -572,10 +581,20 @@ export const openapiSpec = {
     "/api/messages/{messageId}/forward": {
       post: {
         tags: ["Messages"],
-        summary: "Forward a message to another user",
+        summary: "Forward a message to a direct chat (to) or a group (conversationId)",
         security: auth,
         parameters: [{ name: "messageId", in: "path", required: true, schema: { type: "string" } }],
-        requestBody: { required: true, content: json({ type: "object", required: ["to"], properties: { to: { type: "string", description: "recipient user id" } } }) },
+        requestBody: {
+          required: true,
+          content: json({
+            type: "object",
+            description: "Provide exactly one of `to` or `conversationId`",
+            properties: {
+              to: { type: "string", description: "recipient user id (direct chat)" },
+              conversationId: { type: "string", description: "target group/conversation id" },
+            },
+          }),
+        },
         responses: { 201: ok("Forwarded message", ref("Message")) },
       },
     },

@@ -2,6 +2,7 @@ import { useRef, useState, useEffect } from "react";
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
 import { useDraftStore } from "../store/useDraftStore";
+import { usePrefsStore } from "../store/usePrefsStore";
 import { Image, Send, X, Reply, Mic, Pause, Play, Trash2, Paperclip, BarChart3, FileText, Clock, Plus, MapPin, UserRound } from "lucide-react";
 import toast from "react-hot-toast";
 import PollModal from "./PollModal";
@@ -32,6 +33,7 @@ const MessageInput = () => {
     useChatStore();
   const { authUser } = useAuthStore();
   const { getDraft, setDraft, clearDraft } = useDraftStore();
+  const { enterToSend } = usePrefsStore();
   const chatId = selectedUser?._id;
 
   // grow the textarea with its content, capped at ~6 lines
@@ -193,7 +195,11 @@ const MessageInput = () => {
 
   // Enter sends; Shift+Enter inserts a newline (ignored mid-IME-composition)
   const onComposerKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+    if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+    // enterToSend: Enter sends, Shift+Enter = newline.
+    // off: Enter = newline, Ctrl/Cmd+Enter sends.
+    const send = enterToSend ? !e.shiftKey : e.ctrlKey || e.metaKey;
+    if (send) {
       e.preventDefault();
       handleSendMessage(e);
     }

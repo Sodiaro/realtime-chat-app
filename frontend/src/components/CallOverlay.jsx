@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useCallStore } from "../store/useCallStore";
+import { useAuthStore } from "../store/useAuthStore";
 import Avatar from "./Avatar";
 import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff } from "lucide-react";
 
@@ -26,10 +27,14 @@ const CallOverlay = () => {
     toggleMute,
     toggleCamera,
   } = useCallStore();
+  const { onlineUsers } = useAuthStore();
 
   if (callState === "idle") return null;
 
   const peerUser = { profilePic: peer?.pic, fullName: peer?.name };
+  // reachable (socket-connected, even if away) → "Ringing"; otherwise "Calling"
+  const reachable = peer?.id ? onlineUsers.includes(peer.id) : false;
+  const outgoingStatus = reachable ? "Ringing…" : "Calling…";
 
   if (callState === "incoming") {
     return (
@@ -60,7 +65,7 @@ const CallOverlay = () => {
           <div className="text-center">
             <Avatar user={peerUser} size="size-28" className="mx-auto" />
             <h3 className="mt-4 text-2xl font-semibold">{peer?.name}</h3>
-            <p className="opacity-60 mt-1">{callState === "calling" ? "Calling…" : "In call"}</p>
+            <p className="opacity-60 mt-1">{callState === "calling" ? outgoingStatus : "In call"}</p>
             {!isVideo && remoteStream && <Stream stream={remoteStream} className="hidden" />}
           </div>
         )}

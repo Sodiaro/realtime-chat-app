@@ -296,7 +296,9 @@ export const sendMessage: RequestHandler = async (req, res, next) => {
       return;
     }
 
-    if (await blockedBetween(String(senderId), String(receiverId))) {
+    // messaging yourself ("Notes" / self-chat) is always allowed
+    const isSelf = String(receiverId) === String(senderId);
+    if (!isSelf && (await blockedBetween(String(senderId), String(receiverId)))) {
       res.status(403).json({ message: "You can't message this user" });
       return;
     }
@@ -327,7 +329,7 @@ export const sendMessage: RequestHandler = async (req, res, next) => {
 
     // if the recipient is online, the message is delivered right away
     const online = await getOnlineUserIds();
-    const deliveredAt = online.includes(String(receiverId)) ? new Date() : undefined;
+    const deliveredAt = isSelf || online.includes(String(receiverId)) ? new Date() : undefined;
 
     const newMessage = new Message({
       conversationId: conversation._id,
@@ -352,31 +354,32 @@ export const sendMessage: RequestHandler = async (req, res, next) => {
     applyLinkPreview(newMessage); // fire-and-forget unfurl
 
     // bump conversation metadata + the receiver's unread count
-    await Conversation.updateOne(
-      { _id: conversation._id },
-      {
-        $set: { lastMessage: newMessage._id, lastMessageAt: newMessage.createdAt },
-        $inc: { [`unread.${String(receiverId)}`]: 1 },
-      }
-    );
+    const convUpdate: Record<string, unknown> = {
+      $set: { lastMessage: newMessage._id, lastMessageAt: newMessage.createdAt },
+    };
+    if (!isSelf) convUpdate.$inc = { [`unread.${String(receiverId)}`]: 1 };
+    await Conversation.updateOne({ _id: conversation._id }, convUpdate);
 
     // room delivery reaches all of the receiver's devices, on any node
     io.to(userRoom(String(receiverId))).emit("newMessage", newMessage);
 
-    // hand off side-effects (push/email) to the background worker
-    await enqueueNewMessageNotification({
-      messageId: String(newMessage._id),
-      conversationId: String(conversation._id),
-      senderId: String(senderId),
-      receiverId: String(receiverId),
-    });
+    // notes-to-self needs no notification/push
+    if (!isSelf) {
+      // hand off side-effects (push/email) to the background worker
+      await enqueueNewMessageNotification({
+        messageId: String(newMessage._id),
+        conversationId: String(conversation._id),
+        senderId: String(senderId),
+        receiverId: String(receiverId),
+      });
 
-    // web push to the recipient if they're offline (no live socket)
-    if (!online.includes(String(receiverId))) {
-      sendPush([String(receiverId)], {
-        title: req.user!.fullName,
-        body: messagePreview({ text, image: imageUrl, audio: audioUrl, location: locationDoc, contact: contactDoc }),
-      }).catch(() => {});
+      // web push to the recipient if they're offline (no live socket)
+      if (!online.includes(String(receiverId))) {
+        sendPush([String(receiverId)], {
+          title: req.user!.fullName,
+          body: messagePreview({ text, image: imageUrl, audio: audioUrl, location: locationDoc, contact: contactDoc }),
+        }).catch(() => {});
+      }
     }
 
     res.status(201).json(newMessage);
@@ -639,14 +642,17 @@ export const votePoll: RequestHandler = async (req, res, next) => {
   }
 };
 
+// forward a message to a DM (body.to = userId) or a group/conversation
+// (body.conversationId). Works for any source→target combination.
 export const forwardMessage: RequestHandler = async (req, res, next) => {
   try {
     const senderId = req.user!._id;
     const myId = String(senderId);
     const { messageId } = req.params;
-    const { to } = req.body;
+    const to: string | undefined = req.body.to;
+    const targetConvId: string | undefined = req.body.conversationId;
 
-    if (!to || typeof to !== "string") {
+    if (!to && !targetConvId) {
       res.status(400).json({ message: "Recipient is required" });
       return;
     }
@@ -656,40 +662,69 @@ export const forwardMessage: RequestHandler = async (req, res, next) => {
       res.status(404).json({ message: "Message not found" });
       return;
     }
-    if (original.deletedAt) {
-      res.status(400).json({ message: "Cannot forward a deleted message" });
-      return;
-    }
-    if (String(original.senderId) !== myId && String(original.receiverId) !== myId) {
-      res.status(403).json({ message: "Not a participant of this message" });
-      return;
-    }
-    if (await blockedBetween(myId, to)) {
-      res.status(403).json({ message: "You can't message this user" });
+    if (original.deletedAt || original.call || original.system) {
+      res.status(400).json({ message: "This message can't be forwarded" });
       return;
     }
 
-    const conversation = await getOrCreateDirect(senderId, to);
+    // the forwarder must belong to the source conversation
+    const src = await Conversation.findById(original.conversationId).select("participants").lean();
+    if (!src || !src.participants.map(String).includes(myId)) {
+      res.status(403).json({ message: "Not a participant of this message" });
+      return;
+    }
+
+    // resolve the target conversation (group by id, or 1:1 by user id)
+    let target;
+    let receiverId: string | undefined;
+    if (targetConvId) {
+      target = await Conversation.findById(targetConvId);
+      if (!target) {
+        res.status(404).json({ message: "Conversation not found" });
+        return;
+      }
+      if (!target.participants.map(String).includes(myId)) {
+        res.status(403).json({ message: "Not a participant" });
+        return;
+      }
+      if (target.onlyAdminsCanMessage && !target.admins.map(String).includes(myId)) {
+        res.status(403).json({ message: "Only admins can post in this group" });
+        return;
+      }
+    } else {
+      if (await blockedBetween(myId, to!)) {
+        res.status(403).json({ message: "You can't message this user" });
+        return;
+      }
+      target = await getOrCreateDirect(senderId, to!);
+      receiverId = to;
+    }
+
+    const participants = target.participants.map(String);
     const newMessage = new Message({
-      conversationId: conversation._id,
+      conversationId: target._id,
       senderId,
-      receiverId: to,
+      receiverId, // undefined for groups
       text: original.text,
       image: original.image,
+      audio: original.audio,
+      file: original.file,
+      location: original.location,
+      contact: original.contact,
       forwardedFrom: original.senderId,
+      expiresAt: computeExpiry(target.disappearMinutes),
     });
     await newMessage.save();
     messagesSentTotal.inc();
 
+    const unreadInc: Record<string, number> = {};
+    for (const p of participants) if (p !== myId) unreadInc[`unread.${p}`] = 1;
     await Conversation.updateOne(
-      { _id: conversation._id },
-      {
-        $set: { lastMessage: newMessage._id, lastMessageAt: newMessage.createdAt },
-        $inc: { [`unread.${to}`]: 1 },
-      }
+      { _id: target._id },
+      { $set: { lastMessage: newMessage._id, lastMessageAt: newMessage.createdAt }, $inc: unreadInc }
     );
 
-    io.to(userRoom(to)).emit("newMessage", newMessage);
+    for (const p of participants) if (p !== myId) io.to(userRoom(p)).emit("newMessage", newMessage);
     res.status(201).json(newMessage);
   } catch (error) {
     next(error);
@@ -981,9 +1016,29 @@ export const setDisappearing: RequestHandler = async (req, res, next) => {
     if (!conv.participants.map(String).includes(myId))
       return void res.status(403).json({ message: "Not a participant" });
 
-    conv.disappearMinutes = minutes > 0 ? minutes : undefined;
+    const wasOn = (conv.disappearMinutes ?? 0) > 0;
+    const nowOn = minutes > 0;
+    conv.disappearMinutes = nowOn ? minutes : undefined;
     await conv.save();
     await emitConversationUpdated(conv._id);
+
+    // drop a system notice into the timeline for both participants when toggled
+    if (wasOn !== nowOn) {
+      // for DMs, target the other participant so it routes into the open chat
+      const others = conv.participants.map(String).filter((p) => p !== myId);
+      const sysMsg = await new Message({
+        conversationId: conv._id,
+        senderId: myId,
+        receiverId: conv.isGroup ? undefined : others[0],
+        system: { type: "disappearing", on: nowOn },
+      }).save();
+      await Conversation.updateOne(
+        { _id: conv._id },
+        { $set: { lastMessage: sysMsg._id, lastMessageAt: sysMsg.createdAt } }
+      );
+      for (const p of conv.participants) io.to(userRoom(String(p))).emit("newMessage", sysMsg);
+    }
+
     res.status(200).json({ disappearMinutes: conv.disappearMinutes ?? 0 });
   } catch (error) {
     next(error);

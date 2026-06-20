@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { useChatStore } from "../store/useChatStore";
 import { useDraftStore } from "../store/useDraftStore";
+import { useAuthStore } from "../store/useAuthStore";
 import SidebarSkeleton from "./skeletons/SidebarSkeleton";
 import CreateGroupModal from "./CreateGroupModal";
 import NewChatModal from "./NewChatModal";
 import StatusBar from "./StatusBar";
 import Avatar from "./Avatar";
-import { Plus, BellOff, Pin, Archive, Search, X, UserPlus, UsersRound } from "lucide-react";
+import { Plus, BellOff, Pin, Archive, Search, X, UserPlus, UsersRound, ArrowLeft, ChevronRight, Bookmark } from "lucide-react";
 
 // short preview of a conversation's last message for the list subtitle
 const lastMessagePreview = (conv) => {
@@ -45,6 +46,7 @@ const Sidebar = () => {
   } = useChatStore();
 
   const { drafts } = useDraftStore();
+  const { authUser } = useAuthStore();
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [showNewChat, setShowNewChat] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
@@ -76,6 +78,11 @@ const Sidebar = () => {
   const activeUsers = usersWithConv.filter((x) => !x.conv?.isArchived);
   const archivedUsers = usersWithConv.filter((x) => x.conv?.isArchived);
   const archivedCount = archivedGroups.length + archivedUsers.length;
+
+  // the self-chat ("Notes") conversation — both participants are me
+  const selfConv = conversations.find(
+    (c) => !c.isGroup && c.participants?.length > 0 && c.participants.every((p) => String(p._id || p) === authUser?._id)
+  );
 
   // one unified, recency-sorted list (pinned first), filtered by the active tab
   const allItems = [
@@ -232,36 +239,87 @@ const Sidebar = () => {
 
       {/* one unified conversation list */}
       <div className="overflow-y-auto flex-1 px-2 sm:px-2.5 pb-4">
-        {visibleItems.length === 0 ? (
-          <p className="px-4 py-8 text-sm opacity-60 text-center">
-            {query.trim()
-              ? "No conversations match your search"
-              : tab === "groups"
-                ? "No groups yet"
-                : tab === "chats"
-                  ? "No chats yet"
-                  : "No conversations yet"}
-          </p>
-        ) : (
-          visibleItems.map((item) => (item.kind === "group" ? GroupRow(item.c) : UserRow(item.x)))
-        )}
-
-        {archivedCount > 0 && (
-          <div className="mt-2 pt-2 border-t border-base-300/50">
+        {showArchived ? (
+          <>
             <button
-              onClick={() => setShowArchived((v) => !v)}
-              className="w-full px-3 py-2.5 flex items-center gap-2.5 text-sm rounded-xl hover:bg-base-200/60 text-base-content/70"
+              onClick={() => setShowArchived(false)}
+              className="w-full px-3 py-2.5 mb-1 flex items-center gap-2.5 text-sm rounded-xl hover:bg-base-200/60 text-base-content/70"
             >
-              <Archive className="size-4" />
-              <span className="font-medium">Archived ({archivedCount})</span>
+              <ArrowLeft className="size-4" />
+              <span className="font-medium">Archived</span>
+              <span className="ml-auto text-xs opacity-60">{archivedCount}</span>
             </button>
-            {showArchived && (
+            {archivedCount === 0 ? (
+              <p className="px-4 py-8 text-sm opacity-60 text-center">No archived chats</p>
+            ) : (
               <>
                 {archivedGroups.map(GroupRow)}
                 {archivedUsers.map((x) => UserRow(x))}
               </>
             )}
-          </div>
+          </>
+        ) : (
+          <>
+            {/* personal notes / self-chat — always available at the top */}
+            {tab !== "groups" && !q && (
+              <button
+                onClick={() => setSelectedUser({ ...authUser, isSelf: true })}
+                className={`w-full p-3 rounded-xl flex items-center gap-3.5 hover:bg-base-200 transition-colors ${
+                  selectedUser?.isSelf ? "bg-primary/10" : ""
+                }`}
+              >
+                <div className="relative shrink-0">
+                  <Avatar user={authUser} size="size-14" />
+                  <span className="absolute -bottom-0.5 -right-0.5 size-5 rounded-full bg-primary text-primary-content grid place-items-center ring-2 ring-base-100">
+                    <Bookmark className="size-3" />
+                  </span>
+                </div>
+                <div className="flex items-center w-full text-left min-w-0 gap-1">
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">Notes</div>
+                    <div className="text-sm truncate text-base-content/55">
+                      {lastMessagePreview(selfConv) || "Message yourself"}
+                    </div>
+                  </div>
+                </div>
+              </button>
+            )}
+
+            {/* archived appears as a normal category at the top of the list */}
+            {archivedCount > 0 && tab === "all" && !q && (
+              <button
+                onClick={() => setShowArchived(true)}
+                className="w-full p-3 rounded-xl flex items-center gap-3.5 hover:bg-base-200 transition-colors"
+              >
+                <div className="size-14 rounded-full bg-base-200 grid place-items-center shrink-0 text-base-content/60">
+                  <Archive className="size-5" />
+                </div>
+                <div className="flex items-center w-full text-left min-w-0 gap-1">
+                  <div className="min-w-0">
+                    <div className="font-medium">Archived</div>
+                    <div className="text-sm truncate text-base-content/55">
+                      {archivedCount} conversation{archivedCount > 1 ? "s" : ""}
+                    </div>
+                  </div>
+                  <ChevronRight className="ml-auto size-4 opacity-40 shrink-0" />
+                </div>
+              </button>
+            )}
+
+            {visibleItems.length === 0 ? (
+              <p className="px-4 py-8 text-sm opacity-60 text-center">
+                {query.trim()
+                  ? "No conversations match your search"
+                  : tab === "groups"
+                    ? "No groups yet"
+                    : tab === "chats"
+                      ? "No chats yet"
+                      : "No conversations yet"}
+              </p>
+            ) : (
+              visibleItems.map((item) => (item.kind === "group" ? GroupRow(item.c) : UserRow(item.x)))
+            )}
+          </>
         )}
       </div>
 

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import toast from "react-hot-toast";
 import { axiosInstance } from "../lib/axios";
 import { useAuthStore } from "./useAuthStore";
+import { usePrefsStore } from "./usePrefsStore";
 
 // append a message, or replace it if one with the same id already exists
 // (guards against any double-delivery so a message can never duplicate)
@@ -182,6 +183,13 @@ export const useChatStore = create((set, get) => ({
         replyingTo: null,
       });
       get().touchConversation(res.data.conversationId); // move chat to top
+
+      // apply the user's disappearing default to a brand-new direct chat
+      const dflt = usePrefsStore.getState().disappearingDefault;
+      const firstMsgInDM = messages.length === 0 && !selectedUser.isGroup && !selectedUser.isSelf;
+      if (dflt > 0 && firstMsgInDM) {
+        get().setDisappearing(res.data.conversationId, dflt);
+      }
     } catch (error) {
       if (tempId) {
         // leave the bubble visible, flagged as failed
@@ -288,16 +296,16 @@ export const useChatStore = create((set, get) => ({
         });
         get().touchConversation(msg.conversationId); // move chat to top
         if (!mine && !sel.isGroup) get().markMessagesRead(); // read implies delivered
-      } else if (mine || msg.call) {
-        // my own send from elsewhere, or a call event — surface it, no unread
+      } else if (mine || msg.call || msg.system) {
+        // my own send from elsewhere, a call event, or a system notice — no unread
         get().touchConversation(msg.conversationId);
       } else {
         get().bumpUnread(msg.conversationId);
         if (isDM) socket.emit("markDelivered", { to: msg.senderId }); // tell the sender
       }
 
-      // never notify for my own messages or call events
-      if (!mine && !msg.call && typeof document !== "undefined" && (document.hidden || !isOpen)) get().notify(msg);
+      // never notify for my own messages, call events or system notices
+      if (!mine && !msg.call && !msg.system && typeof document !== "undefined" && (document.hidden || !isOpen)) get().notify(msg);
     });
 
     socket.on("conversationCreated", (conversation) => {
@@ -401,7 +409,7 @@ export const useChatStore = create((set, get) => ({
     } catch {
       /* ignore */
     }
-    playDing();
+    if (usePrefsStore.getState().soundEnabled) playDing();
   },
 
   reportMessage: async (messageId, reason) => {
@@ -458,9 +466,10 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
-  forwardMessage: async (messageId, toUserId) => {
+  // target is { to: userId } for a DM or { conversationId } for a group
+  forwardMessage: async (messageId, target) => {
     try {
-      await axiosInstance.post(`/messages/${messageId}/forward`, { to: toUserId });
+      await axiosInstance.post(`/messages/${messageId}/forward`, target);
       toast.success("Message forwarded");
       set({ forwarding: null });
     } catch (error) {

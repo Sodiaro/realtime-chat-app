@@ -28,8 +28,15 @@ const VoiceNote = ({ src, seed, own }) => {
   const [playing, setPlaying] = useState(false);
   const [cur, setCur] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [rate, setRate] = useState(1);
   const bars = useMemo(() => barsFor(seed), [seed]);
   const progress = duration ? cur / duration : 0;
+
+  const cycleRate = () => {
+    const next = rate === 1 ? 1.5 : rate === 1.5 ? 2 : 1;
+    setRate(next);
+    if (audioRef.current) audioRef.current.playbackRate = next;
+  };
 
   const toggle = () => {
     const a = audioRef.current;
@@ -82,6 +89,17 @@ const VoiceNote = ({ src, seed, own }) => {
         {fmtTime(playing || cur ? cur : duration)}
       </span>
 
+      <button
+        onClick={cycleRate}
+        aria-label="Playback speed"
+        title="Playback speed"
+        className={`text-[10px] font-semibold tabular-nums shrink-0 rounded-md px-1.5 py-0.5 leading-none ${
+          own ? "bg-primary-content/20 text-primary-content" : "bg-base-content/10 text-base-content/70"
+        }`}
+      >
+        {rate}x
+      </button>
+
       <audio
         ref={audioRef}
         src={src}
@@ -93,7 +111,10 @@ const VoiceNote = ({ src, seed, own }) => {
           setPlaying(false);
           setCur(0);
         }}
-        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+        onLoadedMetadata={(e) => {
+          setDuration(e.currentTarget.duration);
+          e.currentTarget.playbackRate = rate;
+        }}
         onTimeUpdate={(e) => setCur(e.currentTarget.currentTime)}
       />
     </div>

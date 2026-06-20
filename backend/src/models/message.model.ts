@@ -49,6 +49,12 @@ export interface ICallEvent {
   durationSec?: number;
 }
 
+// in-timeline system notice (e.g. disappearing messages turned on/off)
+export interface ISystemEvent {
+  type: "disappearing";
+  on: boolean;
+}
+
 export interface IMessage {
   _id: Types.ObjectId;
   conversationId: Types.ObjectId;
@@ -63,6 +69,7 @@ export interface IMessage {
   location?: ILocation;
   contact?: IContactCard;
   call?: ICallEvent;
+  system?: ISystemEvent;
   mentions: Types.ObjectId[];
   deliveredAt?: Date;
   readAt?: Date;
@@ -107,6 +114,10 @@ const callSchema = new Schema<ICallEvent>(
   { type: String, status: String, durationSec: Number },
   { _id: false }
 );
+const systemSchema = new Schema<ISystemEvent>(
+  { type: String, on: Boolean },
+  { _id: false }
+);
 
 const messageSchema = new Schema<IMessage>(
   {
@@ -140,6 +151,7 @@ const messageSchema = new Schema<IMessage>(
     location: locationSchema,
     contact: contactSchema,
     call: callSchema,
+    system: systemSchema,
     mentions: {
       type: [{ type: Schema.Types.ObjectId, ref: "User" }],
       default: [],

@@ -1,7 +1,7 @@
 import { memo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useShallow } from "zustand/react/shallow";
-import { Check, CheckCheck, Clock, AlertCircle, Pencil, Trash2, X, Reply, Forward, Pin, Flag, Star, FileText, Download, MapPin, MessageSquare, MoreVertical, Copy, Video, PhoneOutgoing, PhoneIncoming, PhoneMissed } from "lucide-react";
+import { Check, CheckCheck, Clock, AlertCircle, Pencil, Trash2, X, Reply, Forward, Pin, Flag, Star, FileText, Download, MapPin, MessageSquare, MoreVertical, Copy, Video, PhoneOutgoing, PhoneIncoming, PhoneMissed, Timer } from "lucide-react";
 import toast from "react-hot-toast";
 import { useChatStore } from "../store/useChatStore";
 import { formatMessageTime } from "../lib/utils";
@@ -141,6 +141,20 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users, grouped 
     return acc;
   }, {});
 
+  // system notices (e.g. disappearing messages toggled) — centered in timeline
+  if (message.system) {
+    const on = message.system.on;
+    return (
+      <div className="flex justify-center my-3">
+        <div className="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs bg-base-200 text-base-content/70">
+          <Timer className="size-3.5 shrink-0" />
+          <span>Disappearing messages were turned {on ? "on" : "off"}.</span>
+          <span className="opacity-60">· {formatMessageTime(message.createdAt)}</span>
+        </div>
+      </div>
+    );
+  }
+
   // call events render as a centered system message in the timeline
   if (message.call) {
     const c = message.call;
@@ -210,8 +224,8 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users, grouped 
         }}
         className={`chat-bubble rounded-2xl flex flex-col relative ${
           isOwn
-            ? "!bg-primary !text-primary-content"
-            : "!bg-base-100 !text-base-content ring-1 ring-base-300/60 shadow-sm"
+            ? "!bg-primary !text-primary-content rounded-br-md shadow-sm"
+            : "!bg-base-100 !text-base-content ring-1 ring-base-300/70 rounded-bl-md shadow-card"
         } ${mentionsMe && !isDeleted ? "!ring-2 !ring-primary/50" : ""}`}
       >
         {isDeleted ? (

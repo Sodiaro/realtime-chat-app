@@ -13,6 +13,10 @@ import { useAuthStore } from "../store/useAuthStore";
 
 const SAME_GROUP_MS = 5 * 60 * 1000; // group consecutive messages within 5 minutes
 
+// remembers the last scroll position per conversation (for the session) so
+// reopening a chat returns the user to where they left off instead of the top/bottom
+const scrollPositions = new Map();
+
 const dayLabel = (d) => {
   const date = new Date(d);
   const today = new Date();
@@ -50,15 +54,26 @@ const ChatContainer = () => {
     return () => unsubscribeFromMessages();
   }, [selectedUser._id, getMessages, subscribeToMessages, unsubscribeFromMessages, markMessagesRead]);
 
-  // auto-scroll only when the user is already at the bottom (or it's the first load)
+  // auto-scroll when at the bottom; on first load restore the saved position
   useEffect(() => {
     const grew = messages.length > prevCountRef.current;
     const first = prevCountRef.current === 0;
     prevCountRef.current = messages.length;
-    if ((first || ((grew || isTyping || isRecordingPeer) && atBottomRef.current)) && messageEndRef.current) {
-      messageEndRef.current.scrollIntoView({ behavior: first ? "auto" : "smooth" });
+    if (first) {
+      const el = scrollRef.current;
+      const saved = scrollPositions.get(selectedUser._id);
+      if (el && saved != null && saved > 0) {
+        el.scrollTop = saved;
+        atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+      } else {
+        messageEndRef.current?.scrollIntoView({ behavior: "auto" });
+      }
+      return;
     }
-  }, [messages, isTyping, isRecordingPeer]);
+    if ((grew || isTyping || isRecordingPeer) && atBottomRef.current && messageEndRef.current) {
+      messageEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, isTyping, isRecordingPeer, selectedUser._id]);
 
   // announce incoming (non-own) messages politely for screen readers
   const liveRef = useRef(null);
@@ -78,6 +93,7 @@ const ChatContainer = () => {
     const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
     atBottomRef.current = dist < 120;
     setShowJump(dist > 320);
+    scrollPositions.set(selectedUser._id, el.scrollTop); // remember position for this chat
 
     // near the top → fetch an older page, remembering height to restore position
     if (el.scrollTop < 80 && nextCursor && !isFetchingOlderRef.current) {

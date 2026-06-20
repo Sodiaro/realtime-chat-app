@@ -23,6 +23,9 @@ const ContactsPanel = () => {
 
   return (
     <div className="space-y-1">
+      <p className="px-1 pb-1 text-xs uppercase tracking-wide opacity-50">
+        {sorted.length} {sorted.length === 1 ? "contact" : "contacts"}
+      </p>
       {sorted.map((u) => (
         <button
           key={u._id}
