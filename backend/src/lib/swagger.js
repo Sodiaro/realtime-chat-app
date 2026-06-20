@@ -99,6 +99,16 @@ export const openapiSpec = {
             nullable: true,
             properties: { userId: { ...ID, nullable: true }, name: { type: "string" }, username: { type: "string" }, avatar: { type: "string" } },
           },
+          call: {
+            type: "object",
+            nullable: true,
+            description: "call event rendered as a centered system message",
+            properties: {
+              type: { type: "string", enum: ["audio", "video"] },
+              status: { type: "string", enum: ["answered", "missed", "rejected"] },
+              durationSec: { type: "integer" },
+            },
+          },
           mentions: { type: "array", items: ID },
           replyTo: { oneOf: [ID, ref("Message")], nullable: true },
           forwardedFrom: { ...ID, nullable: true },

@@ -38,7 +38,7 @@ const MessageInput = () => {
   const autoGrow = (el) => {
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   };
 
   // load this chat's saved draft when switching conversations
@@ -318,7 +318,7 @@ const MessageInput = () => {
             {paused ? <Play className="size-4" /> : <Pause className="size-4" />}
           </button>
           <button type="button" onClick={finishRecording} className="btn btn-primary btn-sm btn-circle" title="Send">
-            <Send size={18} />
+            <Send size={20} />
           </button>
         </div>
       ) : (
@@ -328,8 +328,8 @@ const MessageInput = () => {
               ref={textareaRef}
               rows={1}
               aria-label="Message"
-              className="flex-1 bg-transparent outline-none text-sm py-2 min-w-0 resize-none leading-5 max-h-[140px] overflow-y-auto"
-              placeholder="Write your message…   (Shift+Enter for a new line)"
+              className="flex-1 bg-transparent outline-none text-base py-2.5 min-w-0 resize-none leading-6 max-h-[160px] overflow-y-auto"
+              placeholder="Type a message…"
               value={text}
               onChange={handleTextChange}
               onKeyDown={onComposerKeyDown}
@@ -351,7 +351,7 @@ const MessageInput = () => {
                 className="btn btn-ghost btn-sm btn-circle text-base-content/50"
                 title="Attach"
               >
-                <Plus size={18} />
+                <Plus size={20} />
               </button>
               <ul
                 tabIndex={0}
@@ -391,7 +391,7 @@ const MessageInput = () => {
               onClick={openSchedule}
               title="Schedule message"
             >
-              <Clock size={18} />
+              <Clock size={20} />
             </button>
             <button
               type="button"
@@ -399,7 +399,7 @@ const MessageInput = () => {
               className="btn btn-ghost btn-sm btn-circle text-base-content/50"
               title="Record voice note"
             >
-              <Mic size={18} />
+              <Mic size={20} />
             </button>
           </div>
           <button
@@ -407,7 +407,7 @@ const MessageInput = () => {
             className="btn btn-primary btn-circle"
             disabled={!text.trim() && !imagePreview && !filePreview}
           >
-            <Send size={20} />
+            <Send size={22} />
           </button>
         </form>
       )}

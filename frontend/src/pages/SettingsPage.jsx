@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useThemeStore } from "../store/useThemeStore";
+import { useChatBgStore, CHAT_BACKGROUNDS } from "../store/useChatBgStore";
 import { useAuthStore } from "../store/useAuthStore";
 import { Monitor, Sun, Moon } from "lucide-react";
 
@@ -30,6 +31,7 @@ const deviceLabel = (ua = "") => {
 
 const SettingsPage = () => {
   const { mode, setMode } = useThemeStore();
+  const { bg, setBg } = useChatBgStore();
   const { authUser, changePassword, logoutAllDevices, deleteAccount, updatePrivacy, getSessions, revokeSession } =
     useAuthStore();
 
@@ -228,6 +230,33 @@ const SettingsPage = () => {
                 <span className="text-sm font-medium">{opt.label}</span>
               </button>
             ))}
+          </div>
+
+          <div>
+            <h3 className="text-sm font-semibold mb-1">Chat wallpaper</h3>
+            <p className="text-xs text-base-content/60 mb-3">
+              Personalize the conversation background.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              {CHAT_BACKGROUNDS.map((b) => (
+                <button
+                  key={b.key}
+                  onClick={() => setBg(b.key)}
+                  aria-pressed={bg === b.key}
+                  className="flex flex-col items-center gap-1.5"
+                  title={b.label}
+                >
+                  <span
+                    className={`${b.class} size-14 rounded-xl border-2 ${
+                      bg === b.key ? "border-primary" : "border-base-300"
+                    }`}
+                  />
+                  <span className={`text-xs ${bg === b.key ? "text-primary font-medium" : "opacity-60"}`}>
+                    {b.label}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>

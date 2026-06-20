@@ -43,6 +43,12 @@ export interface IContactCard {
   avatar?: string;
 }
 
+export interface ICallEvent {
+  type: "audio" | "video";
+  status: "answered" | "missed" | "rejected";
+  durationSec?: number;
+}
+
 export interface IMessage {
   _id: Types.ObjectId;
   conversationId: Types.ObjectId;
@@ -56,6 +62,7 @@ export interface IMessage {
   poll?: IPoll;
   location?: ILocation;
   contact?: IContactCard;
+  call?: ICallEvent;
   mentions: Types.ObjectId[];
   deliveredAt?: Date;
   readAt?: Date;
@@ -96,6 +103,10 @@ const contactSchema = new Schema<IContactCard>(
   { userId: { type: Schema.Types.ObjectId, ref: "User" }, name: String, username: String, avatar: String },
   { _id: false }
 );
+const callSchema = new Schema<ICallEvent>(
+  { type: String, status: String, durationSec: Number },
+  { _id: false }
+);
 
 const messageSchema = new Schema<IMessage>(
   {
@@ -128,6 +139,7 @@ const messageSchema = new Schema<IMessage>(
     poll: pollSchema,
     location: locationSchema,
     contact: contactSchema,
+    call: callSchema,
     mentions: {
       type: [{ type: Schema.Types.ObjectId, ref: "User" }],
       default: [],

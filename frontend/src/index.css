@@ -63,6 +63,36 @@
 }
 
 @layer utilities {
+  /* selectable conversation backgrounds — all token-based so they read well in
+     light & dark and keep message text legible */
+  .chat-bg-plain {
+    background-color: hsl(var(--b2));
+  }
+  .chat-bg-doodle {
+    background-color: hsl(var(--b2));
+    background-image: radial-gradient(hsl(var(--bc) / 0.05) 1.5px, transparent 1.6px);
+    background-size: 22px 22px;
+  }
+  .chat-bg-aurora {
+    background-color: hsl(var(--b2));
+    background-image:
+      radial-gradient(60% 55% at 18% 0%, hsl(var(--p) / 0.14), transparent 70%),
+      radial-gradient(55% 55% at 100% 100%, hsl(var(--s) / 0.12), transparent 70%);
+  }
+  .chat-bg-dusk {
+    background-color: hsl(var(--b2));
+    background-image:
+      radial-gradient(55% 55% at 100% 0%, hsl(262 80% 60% / 0.16), transparent 70%),
+      radial-gradient(55% 55% at 0% 100%, hsl(210 90% 55% / 0.14), transparent 70%);
+  }
+  .chat-bg-mesh {
+    background-color: hsl(var(--b2));
+    background-image:
+      radial-gradient(38% 38% at 12% 18%, hsl(var(--p) / 0.14), transparent 60%),
+      radial-gradient(40% 40% at 88% 22%, hsl(330 80% 62% / 0.12), transparent 60%),
+      radial-gradient(45% 45% at 50% 100%, hsl(190 90% 52% / 0.12), transparent 60%);
+  }
+
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }

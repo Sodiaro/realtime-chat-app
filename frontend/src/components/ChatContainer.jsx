@@ -1,4 +1,5 @@
 import { useChatStore } from "../store/useChatStore";
+import { useChatBgStore, bgClass } from "../store/useChatBgStore";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Pin, Mic, ChevronDown, Loader2 } from "lucide-react";
 
@@ -29,6 +30,7 @@ const ChatContainer = () => {
     markMessagesRead, users, nextCursor, isLoadingOlder, loadOlderMessages,
   } = useChatStore();
   const { authUser } = useAuthStore();
+  const { bg } = useChatBgStore();
 
   const scrollRef = useRef(null);
   const messageEndRef = useRef(null);
@@ -175,7 +177,7 @@ const ChatContainer = () => {
 
       <ForwardModal />
 
-      <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto px-3 sm:px-5 py-4 bg-base-200/30">
+      <div ref={scrollRef} onScroll={onScroll} className={`flex-1 overflow-y-auto px-4 sm:px-6 lg:px-10 py-5 ${bgClass(bg)}`}>
         {isLoadingOlder && (
           <div className="flex justify-center py-2">
             <Loader2 className="size-5 animate-spin text-base-content/40" />

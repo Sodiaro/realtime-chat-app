@@ -1,3 +1,6 @@
+import { useState } from "react";
+import { UsersRound } from "lucide-react";
+
 const COLORS = [
   "bg-red-500",
   "bg-orange-500",
@@ -27,17 +30,35 @@ const initials = (name) =>
     .map((w) => w[0]?.toUpperCase() || "")
     .join("") || "?";
 
-// shows the profile pic, or a colored initials avatar when there's none
-const Avatar = ({ user, name, src, size = "size-10", className = "" }) => {
+// Profile/group image with graceful fallbacks: a colored initials avatar for
+// users, a group icon for groups, and automatic fallback if the URL fails to load.
+const Avatar = ({ user, name, src, size = "size-10", className = "", group = false }) => {
   const img = src ?? user?.profilePic;
   const label = name ?? user?.fullName ?? user?.name;
-  const seed = user?._id || label;
+  const seed = user?._id || label || (group ? "group" : "?");
+  // track which src failed, so changing the src auto-recovers (no effect needed)
+  const [failedSrc, setFailedSrc] = useState(null);
+  const broken = !!img && failedSrc === img;
 
-  if (img) {
+  if (img && !broken) {
     return (
-      <img src={img} alt={label || "avatar"} className={`${size} rounded-full object-cover ${className}`} />
+      <img
+        src={img}
+        alt={label || "avatar"}
+        onError={() => setFailedSrc(img)}
+        className={`${size} rounded-full object-cover bg-base-300 ${className}`}
+      />
     );
   }
+
+  if (group) {
+    return (
+      <div className={`${size} rounded-full grid place-items-center bg-primary/15 text-primary ${className}`}>
+        <UsersRound className="w-1/2 h-1/2" />
+      </div>
+    );
+  }
+
   return (
     <div
       className={`${size} rounded-full grid place-items-center text-white text-sm font-semibold ${colorFor(seed)} ${className}`}

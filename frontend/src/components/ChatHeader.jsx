@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Search, Ban, Users, MoreVertical, BellOff, Bell, Archive, Info, UserRound, Timer, Phone, Video, Pin, ArrowLeft } from "lucide-react";
+import { X, Search, Ban, MoreVertical, BellOff, Bell, Archive, Info, UserRound, Timer, Phone, Video, Pin, ArrowLeft } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 import { useCallStore } from "../store/useCallStore";
@@ -55,7 +55,7 @@ const ChatHeader = () => {
   };
 
   return (
-    <div className="p-2.5 border-b border-base-300">
+    <div className="p-3.5 border-b border-base-300">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1 min-w-0">
           <button
@@ -70,131 +70,155 @@ const ChatHeader = () => {
             onClick={() => !isGroup && setShowProfile(true)}
           >
           {isGroup ? (
-            selectedUser.avatar ? (
-              <img src={selectedUser.avatar} alt="" className="size-10 rounded-full object-cover" />
-            ) : (
-              <div className="size-10 rounded-full grid place-items-center bg-base-300">
-                <Users className="size-5" />
-              </div>
-            )
+            <Avatar group src={selectedUser.avatar} name={selectedUser.fullName} size="size-12" />
           ) : (
-            <Avatar user={selectedUser} size="size-10" />
+            <Avatar user={selectedUser} size="size-12" />
           )}
 
-          <div>
-            <h3 className="font-medium">
-              {selectedUser.fullName}
-              {!isGroup && selectedUser.username && (
-                <span className="ml-1.5 text-xs font-normal opacity-50">@{selectedUser.username}</span>
-              )}
-            </h3>
-            <p className="text-sm text-base-content/70">
+          <div className="min-w-0">
+            <h3 className="text-lg font-semibold leading-tight truncate">{selectedUser.fullName}</h3>
+            <p className={`text-sm ${isOnline && !isGroup ? "text-success" : "text-base-content/60"}`}>
               {isGroup
                 ? `${selectedUser.participants?.length || 0} members`
                 : isBlocked
                   ? "Blocked"
                   : isOnline
-                    ? selectedUser.status || "Online"
+                    ? "Online"
                     : formatLastSeen(selectedUser.lastSeen)}
             </p>
           </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
           {!isGroup && (
-            <>
-              <button onClick={() => startCall(selectedUser, false)} title="Voice call">
-                <Phone className="size-5" />
-              </button>
-              <button onClick={() => startCall(selectedUser, true)} title="Video call">
-                <Video className="size-5" />
-              </button>
-            </>
-          )}
-          {!isGroup && (
-            <button onClick={() => setSearchOpen((v) => !v)} title="Search messages">
-              <Search className="size-5" />
+            <button
+              onClick={() => startCall(selectedUser, false)}
+              title="Voice call"
+              aria-label="Voice call"
+              className="btn btn-ghost btn-sm btn-circle text-base-content/70 hover:text-base-content"
+            >
+              <Phone className="size-5" />
             </button>
           )}
           {!isGroup && (
             <button
-              onClick={() => blockUser(selectedUser._id)}
-              title={isBlocked ? "Unblock user" : "Block user"}
-              className={isBlocked ? "text-error" : ""}
+              onClick={() => setSearchOpen((v) => !v)}
+              title="Search messages"
+              aria-label="Search messages"
+              className={`btn btn-ghost btn-sm btn-circle ${
+                searchOpen ? "text-primary bg-primary/10" : "text-base-content/70 hover:text-base-content"
+              }`}
             >
-              <Ban className="size-5" />
+              <Search className="size-5" />
             </button>
           )}
 
           <div className="dropdown dropdown-end">
-            <button tabIndex={0} className="px-1" title="More">
+            <button
+              tabIndex={0}
+              title="More options"
+              aria-label="More options"
+              className="btn btn-ghost btn-sm btn-circle text-base-content/70 hover:text-base-content"
+            >
               <MoreVertical className="size-5" />
             </button>
-            <ul tabIndex={0} className="dropdown-content menu bg-base-100 rounded-box shadow w-48 z-50 mt-2">
-              {!isGroup && (
-                <li>
-                  <button onClick={() => setShowProfile(true)}>
-                    <UserRound className="size-4" /> View profile
-                  </button>
-                </li>
-              )}
-              {isGroup && (
+            <ul
+              tabIndex={0}
+              className="dropdown-content menu bg-base-100 rounded-2xl shadow-pop border border-base-300/60 w-64 z-50 mt-2 p-1.5 gap-0.5 [&_li>button]:gap-3 [&_li>button]:rounded-lg [&_li>button]:py-2.5 [&_li>button]:text-sm [&_li>button>svg]:opacity-70"
+            >
+              {/* identity + quick action */}
+              {isGroup ? (
                 <li>
                   <button onClick={() => setShowGroupInfo(true)}>
-                    <Info className="size-4" /> Group info
+                    <Info className="size-4 shrink-0" /> Group info
                   </button>
                 </li>
-              )}
-              {conv && (
+              ) : (
                 <li>
-                  <button onClick={() => togglePin(conv._id)}>
-                    <Pin className="size-4" />
-                    {conv.isPinned ? "Unpin" : "Pin to top"}
+                  <button onClick={() => setShowProfile(true)}>
+                    <UserRound className="size-4 shrink-0" /> View profile
                   </button>
                 </li>
               )}
-              {conv && (
+              {!isGroup && (
                 <li>
-                  <button onClick={() => toggleMute(conv._id)}>
-                    {conv.isMuted ? <Bell className="size-4" /> : <BellOff className="size-4" />}
-                    {conv.isMuted ? "Unmute" : "Mute"}
+                  <button onClick={() => startCall(selectedUser, true)}>
+                    <Video className="size-4 shrink-0" /> Video call
                   </button>
                 </li>
               )}
-              {conv && (
-                <li>
-                  <button onClick={() => toggleArchive(conv._id)}>
-                    <Archive className="size-4" />
-                    {conv.isArchived ? "Unarchive" : "Archive"}
-                  </button>
-                </li>
-              )}
+
+              {/* conversation settings */}
               {conv && (
                 <>
-                  <li className="menu-title text-xs flex-row items-center gap-1 pt-1">
+                  <div className="h-px bg-base-300/60 mx-2 my-1" />
+                  <li>
+                    <button onClick={() => toggleMute(conv._id)}>
+                      {conv.isMuted ? <Bell className="size-4 shrink-0" /> : <BellOff className="size-4 shrink-0" />}
+                      {conv.isMuted ? "Unmute" : "Mute"}
+                    </button>
+                  </li>
+                  <li>
+                    <button onClick={() => togglePin(conv._id)}>
+                      <Pin className="size-4 shrink-0" />
+                      {conv.isPinned ? "Unpin" : "Pin to top"}
+                    </button>
+                  </li>
+                  <li>
+                    <button onClick={() => toggleArchive(conv._id)}>
+                      <Archive className="size-4 shrink-0" />
+                      {conv.isArchived ? "Unarchive" : "Archive"}
+                    </button>
+                  </li>
+
+                  <li className="menu-title flex-row items-center gap-2 px-3 pt-2 pb-1 text-[11px] uppercase tracking-wide opacity-50">
                     <Timer className="size-3.5" /> Disappearing
                   </li>
-                  {[
-                    { l: "Off", m: 0 },
-                    { l: "1 day", m: 1440 },
-                    { l: "1 week", m: 10080 },
-                  ].map((o) => (
-                    <li key={o.m}>
-                      <button onClick={() => setDisappearing(conv._id, o.m)}>
-                        {o.l}
-                        {(conv.disappearMinutes || 0) === o.m && <span className="ml-auto">✓</span>}
-                      </button>
-                    </li>
-                  ))}
+                  <li className="px-2 pb-1">
+                    <div className="flex gap-1 bg-base-200/60 rounded-lg p-1 hover:bg-base-200/60">
+                      {[
+                        { l: "Off", m: 0 },
+                        { l: "1 day", m: 1440 },
+                        { l: "1 week", m: 10080 },
+                      ].map((o) => (
+                        <button
+                          key={o.m}
+                          onClick={() => setDisappearing(conv._id, o.m)}
+                          className={`flex-1 rounded-md py-1 text-xs font-medium transition-colors ${
+                            (conv.disappearMinutes || 0) === o.m
+                              ? "bg-primary text-primary-content"
+                              : "hover:bg-base-300"
+                          }`}
+                        >
+                          {o.l}
+                        </button>
+                      ))}
+                    </div>
+                  </li>
                 </>
+              )}
+
+              {/* exit + destructive */}
+              <div className="h-px bg-base-300/60 mx-2 my-1" />
+              <li>
+                <button onClick={() => setSelectedUser(null)}>
+                  <X className="size-4 shrink-0" /> Close chat
+                </button>
+              </li>
+              {!isGroup && (
+                <li>
+                  <button
+                    onClick={() => blockUser(selectedUser._id)}
+                    className="!text-error hover:!bg-error/10"
+                  >
+                    <Ban className="size-4 shrink-0" />
+                    {isBlocked ? "Unblock user" : "Block user"}
+                  </button>
+                </li>
               )}
             </ul>
           </div>
-
-          <button onClick={() => setSelectedUser(null)}>
-            <X />
-          </button>
         </div>
       </div>
 

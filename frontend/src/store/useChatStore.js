@@ -288,15 +288,16 @@ export const useChatStore = create((set, get) => ({
         });
         get().touchConversation(msg.conversationId); // move chat to top
         if (!mine && !sel.isGroup) get().markMessagesRead(); // read implies delivered
-      } else if (mine) {
-        get().touchConversation(msg.conversationId); // my own send from elsewhere — no unread
+      } else if (mine || msg.call) {
+        // my own send from elsewhere, or a call event — surface it, no unread
+        get().touchConversation(msg.conversationId);
       } else {
         get().bumpUnread(msg.conversationId);
         if (isDM) socket.emit("markDelivered", { to: msg.senderId }); // tell the sender
       }
 
-      // never notify for my own messages
-      if (!mine && typeof document !== "undefined" && (document.hidden || !isOpen)) get().notify(msg);
+      // never notify for my own messages or call events
+      if (!mine && !msg.call && typeof document !== "undefined" && (document.hidden || !isOpen)) get().notify(msg);
     });
 
     socket.on("conversationCreated", (conversation) => {

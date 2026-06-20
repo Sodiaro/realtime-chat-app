@@ -1,22 +1,28 @@
+import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 import { useThemeStore } from "../store/useThemeStore";
+import Avatar from "./Avatar";
+import ConfirmModal from "./ui/ConfirmModal";
 import {
   LogOut, MessageSquare, Settings, User, Shield, Star, Phone, Clock, Search, Sun, Moon,
 } from "lucide-react";
 
-const NavLink = ({ to, icon, label }) => {
+// compact icon-only nav button with an active state + tooltip
+const IconNav = ({ to, icon, label }) => {
   const { pathname } = useLocation();
   const active = pathname === to;
   return (
     <Link
       to={to}
       title={label}
-      className={`btn btn-sm btn-ghost gap-2 ${active ? "bg-base-200 text-base-content" : "text-base-content/70"}`}
+      aria-label={label}
+      className={`btn btn-ghost btn-sm btn-circle ${
+        active ? "bg-primary/10 text-primary" : "text-base-content/60 hover:text-base-content"
+      }`}
     >
       {icon}
-      <span className="hidden lg:inline">{label}</span>
     </Link>
   );
 };
@@ -25,73 +31,124 @@ const Navbar = () => {
   const { logout, authUser } = useAuthStore();
   const { conversations } = useChatStore();
   const { resolved, toggle } = useThemeStore();
+  const { pathname } = useLocation();
   const isDark = resolved === "devdark";
+  const [confirmLogout, setConfirmLogout] = useState(false);
 
   const totalUnread = conversations.reduce(
     (sum, c) => sum + (c.isArchived ? 0 : c.unread || 0),
     0
   );
 
+  const closeMenu = () => document.activeElement?.blur();
+  // on the chat screen the desktop layout uses the left icon rail instead
+  const hiddenOnDesktop = authUser && pathname === "/";
+
   return (
-    <header className="bg-base-100/80 border-b border-base-300/70 fixed w-full top-0 z-40 backdrop-blur-xl">
-      <div className="container mx-auto px-3 sm:px-4 h-14">
-        <div className="flex items-center justify-between h-full gap-2">
-          <Link to="/" className="flex items-center gap-2.5 hover:opacity-90 transition-opacity shrink-0">
-            <div className="size-9 rounded-xl bg-primary/15 flex items-center justify-center relative">
-              <MessageSquare className="w-[18px] h-[18px] text-primary" />
-              {totalUnread > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 badge badge-primary badge-sm border-2 border-base-100">
-                  {totalUnread > 99 ? "99+" : totalUnread}
-                </span>
-              )}
-            </div>
-            <h1 className="text-base font-bold tracking-tight hidden sm:block">DevChat</h1>
-          </Link>
-
-          <div className="flex items-center gap-0.5">
-            {authUser && (
-              <>
-                <NavLink to="/search" icon={<Search className="size-[18px]" />} label="Search" />
-                <NavLink to="/scheduled" icon={<Clock className="size-[18px]" />} label="Scheduled" />
-                <NavLink to="/calls" icon={<Phone className="size-[18px]" />} label="Calls" />
-                <NavLink to="/starred" icon={<Star className="size-[18px]" />} label="Starred" />
-                {authUser.isAdmin && (
-                  <NavLink to="/admin" icon={<Shield className="size-[18px]" />} label="Admin" />
-                )}
-              </>
-            )}
-
-            <div className="w-px h-5 bg-base-300 mx-1.5 hidden sm:block" />
-
-            <button
-              onClick={toggle}
-              aria-label="Toggle theme"
-              title={isDark ? "Switch to light" : "Switch to dark"}
-              className="btn btn-sm btn-ghost btn-circle text-base-content/70"
-            >
-              {isDark ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
-            </button>
-
-            <NavLink to="/settings" icon={<Settings className="size-[18px]" />} label="Settings" />
-
-            {authUser && (
-              <>
-                <Link to="/profile" className="btn btn-sm btn-ghost gap-2 text-base-content/70" title="Profile">
-                  <User className="size-[18px]" />
-                  <span className="hidden lg:inline">Profile</span>
-                </Link>
-                <button
-                  onClick={logout}
-                  title="Log out"
-                  className="btn btn-sm btn-ghost btn-circle text-base-content/70 hover:text-error"
-                >
-                  <LogOut className="size-[18px]" />
-                </button>
-              </>
+    <header
+      className={`bg-base-100/80 border-b border-base-300/70 fixed w-full top-0 z-40 backdrop-blur-xl ${
+        hiddenOnDesktop ? "md:hidden" : ""
+      }`}
+    >
+      <div className="w-full px-3 sm:px-5 h-14 flex items-center justify-between gap-2">
+        {/* logo */}
+        <Link to="/" className="flex items-center gap-2.5 shrink-0 hover:opacity-90 transition-opacity">
+          <div className="size-9 rounded-xl bg-primary/15 grid place-items-center relative">
+            <MessageSquare className="size-[18px] text-primary" />
+            {totalUnread > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 badge badge-primary badge-sm border-2 border-base-100">
+                {totalUnread > 99 ? "99+" : totalUnread}
+              </span>
             )}
           </div>
+          <h1 className="text-base font-bold tracking-tight hidden sm:block">DevChat</h1>
+        </Link>
+
+        {/* actions */}
+        <div className="flex items-center gap-0.5 sm:gap-1">
+          {authUser && (
+            <nav className="flex items-center gap-0.5">
+              <IconNav to="/search" icon={<Search className="size-[18px]" />} label="Search" />
+              <IconNav to="/calls" icon={<Phone className="size-[18px]" />} label="Calls" />
+              <IconNav to="/scheduled" icon={<Clock className="size-[18px]" />} label="Scheduled" />
+              <IconNav to="/starred" icon={<Star className="size-[18px]" />} label="Starred" />
+            </nav>
+          )}
+
+          <button
+            onClick={toggle}
+            aria-label="Toggle theme"
+            title={isDark ? "Switch to light" : "Switch to dark"}
+            className="btn btn-ghost btn-sm btn-circle text-base-content/60 hover:text-base-content"
+          >
+            {isDark ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
+          </button>
+
+          {authUser ? (
+            <div className="dropdown dropdown-end">
+              <button
+                tabIndex={0}
+                aria-label="Account menu"
+                className="ml-0.5 sm:ml-1 rounded-full ring-offset-1 ring-offset-base-100 hover:ring-2 ring-primary/40 transition focus:outline-none focus:ring-2"
+              >
+                <Avatar user={authUser} size="size-8" />
+              </button>
+              <ul
+                tabIndex={0}
+                className="dropdown-content menu bg-base-100 rounded-box shadow-pop border border-base-300/60 w-60 mt-2 p-2 z-50"
+              >
+                <li className="px-2 py-1.5 mb-1">
+                  <div className="flex items-center gap-3 hover:bg-transparent cursor-default active:!bg-transparent pointer-events-none">
+                    <Avatar user={authUser} size="size-10" />
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold truncate">{authUser.fullName}</div>
+                      <div className="text-xs opacity-60 truncate">{authUser.email}</div>
+                    </div>
+                  </div>
+                </li>
+                <li>
+                  <Link to="/profile" onClick={closeMenu}>
+                    <User className="size-4" /> Profile
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/settings" onClick={closeMenu}>
+                    <Settings className="size-4" /> Settings
+                  </Link>
+                </li>
+                {authUser.isAdmin && (
+                  <li>
+                    <Link to="/admin" onClick={closeMenu}>
+                      <Shield className="size-4" /> Admin
+                    </Link>
+                  </li>
+                )}
+                <div className="h-px bg-base-300/70 my-1.5" />
+                <li>
+                  <button onClick={() => { closeMenu(); setConfirmLogout(true); }} className="text-error">
+                    <LogOut className="size-4" /> Log out
+                  </button>
+                </li>
+              </ul>
+            </div>
+          ) : (
+            <Link to="/settings" className="btn btn-ghost btn-sm btn-circle text-base-content/60" title="Settings">
+              <Settings className="size-[18px]" />
+            </Link>
+          )}
         </div>
       </div>
+
+      {confirmLogout && (
+        <ConfirmModal
+          title="Log out"
+          message="Are you sure you want to log out?"
+          confirmLabel="Log out"
+          danger
+          onConfirm={logout}
+          onClose={() => setConfirmLogout(false)}
+        />
+      )}
     </header>
   );
 };

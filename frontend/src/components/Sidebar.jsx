@@ -1,12 +1,37 @@
 import { useEffect, useState } from "react";
 import { useChatStore } from "../store/useChatStore";
-import { useAuthStore } from "../store/useAuthStore";
 import { useDraftStore } from "../store/useDraftStore";
 import SidebarSkeleton from "./skeletons/SidebarSkeleton";
 import CreateGroupModal from "./CreateGroupModal";
+import NewChatModal from "./NewChatModal";
 import StatusBar from "./StatusBar";
 import Avatar from "./Avatar";
-import { Users, UsersRound, Plus, BellOff, Pin, Archive, Search, X } from "lucide-react";
+import { Plus, BellOff, Pin, Archive, Search, X, UserPlus, UsersRound } from "lucide-react";
+
+// short preview of a conversation's last message for the list subtitle
+const lastMessagePreview = (conv) => {
+  const m = conv?.lastMessage;
+  if (!m) return "";
+  if (m.deletedAt) return "This message was deleted";
+  return (
+    m.text ||
+    (m.image
+      ? "📷 Photo"
+      : m.audio
+        ? "🎤 Voice note"
+        : m.file
+          ? "📎 File"
+          : m.poll
+            ? "📊 Poll"
+            : m.location
+              ? "📍 Location"
+              : m.contact
+                ? "👤 Contact"
+                : m.call
+                  ? "📞 Call"
+                  : "")
+  );
+};
 
 const Sidebar = () => {
   const {
@@ -16,42 +41,22 @@ const Sidebar = () => {
     getConversations,
     selectedUser,
     setSelectedUser,
-    searchUsers,
     isUsersLoading,
   } = useChatStore();
 
-  const { onlineUsers } = useAuthStore();
   const { drafts } = useDraftStore();
-  const [showOnlineOnly, setShowOnlineOnly] = useState(false);
   const [showGroupModal, setShowGroupModal] = useState(false);
+  const [showNewChat, setShowNewChat] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [tab, setTab] = useState("all"); // all | chats | groups
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState([]);
 
   useEffect(() => {
     getUsers();
     getConversations();
   }, [getUsers, getConversations]);
 
-  // debounced user search by username/name
-  useEffect(() => {
-    if (!query.trim()) {
-      setResults([]);
-      return;
-    }
-    const t = setTimeout(async () => setResults(await searchUsers(query.trim())), 350);
-    return () => clearTimeout(t);
-  }, [query, searchUsers]);
-
-  const openSearchResult = (user) => {
-    setSelectedUser(user);
-    setQuery("");
-    setResults([]);
-  };
-
-  const filteredUsers = showOnlineOnly
-    ? users.filter((user) => onlineUsers.includes(user._id))
-    : users;
+  const filteredUsers = users;
 
   const convForUser = (userId) =>
     conversations.find((c) => !c.isGroup && c.participants?.some((p) => (p._id || p) === userId));
@@ -72,6 +77,30 @@ const Sidebar = () => {
   const archivedUsers = usersWithConv.filter((x) => x.conv?.isArchived);
   const archivedCount = archivedGroups.length + archivedUsers.length;
 
+  // one unified, recency-sorted list (pinned first), filtered by the active tab
+  const allItems = [
+    ...activeUsers.map((x) => ({ key: `u-${x.u._id}`, kind: "dm", x, time: lastAt(x.conv), pinned: x.conv?.isPinned ? 1 : 0 })),
+    ...activeGroups.map((c) => ({ key: `g-${c._id}`, kind: "group", c, time: lastAt(c), pinned: c.isPinned ? 1 : 0 })),
+  ].sort((a, b) => b.pinned - a.pinned || b.time - a.time);
+  const tabItems =
+    tab === "chats"
+      ? allItems.filter((i) => i.kind === "dm")
+      : tab === "groups"
+        ? allItems.filter((i) => i.kind === "group")
+        : allItems;
+  // the sidebar search filters the existing conversation list by name
+  const q = query.trim().toLowerCase();
+  const visibleItems = q
+    ? tabItems.filter((i) =>
+        (i.kind === "group" ? i.c.name : i.x.u.fullName)?.toLowerCase().includes(q)
+      )
+    : tabItems;
+  const TABS = [
+    { key: "all", label: "All" },
+    { key: "chats", label: "Chats" },
+    { key: "groups", label: "Groups" },
+  ];
+
   const Badge = ({ count }) =>
     count > 0 ? (
       <span className="ml-auto badge badge-primary badge-sm">{count > 99 ? "99+" : count}</span>
@@ -81,25 +110,19 @@ const Sidebar = () => {
     <button
       key={c._id}
       onClick={() => setSelectedUser({ ...c, fullName: c.name })}
-      className={`w-full p-3 flex items-center gap-3 hover:bg-base-200 transition-colors ${
+      className={`w-full p-3 rounded-xl flex items-center gap-3.5 hover:bg-base-200 transition-colors ${
         selectedUser?._id === c._id ? "bg-primary/10" : ""
       }`}
     >
-      {c.avatar ? (
-        <img src={c.avatar} alt="" className="size-12 rounded-full object-cover shrink-0" />
-      ) : (
-        <div className="size-12 rounded-full bg-base-300 grid place-items-center shrink-0">
-          <UsersRound className="size-6" />
-        </div>
-      )}
+      <Avatar group src={c.avatar} name={c.name} size="size-14" className="shrink-0" />
       <div className="flex items-center w-full text-left min-w-0 gap-1">
         <div className="min-w-0">
           <div className="font-medium truncate">{c.name}</div>
-          <div className="text-sm truncate">
+          <div className="text-sm truncate text-base-content/55">
             {drafts[c._id] && selectedUser?._id !== c._id ? (
               <span className="text-error">Draft: {drafts[c._id]}</span>
             ) : (
-              <span className="text-zinc-400">{c.participants?.length || 0} members</span>
+              lastMessagePreview(c) || `${c.participants?.length || 0} members`
             )}
           </div>
         </div>
@@ -116,26 +139,19 @@ const Sidebar = () => {
     <button
       key={user._id}
       onClick={() => setSelectedUser(user)}
-      className={`w-full p-3 flex items-center gap-3 hover:bg-base-200 transition-colors ${
+      className={`w-full p-3 rounded-xl flex items-center gap-3.5 hover:bg-base-200 transition-colors ${
         selectedUser?._id === user._id ? "bg-primary/10" : ""
       }`}
     >
-      <div className="relative shrink-0">
-        <Avatar user={user} size="size-12" />
-        {onlineUsers.includes(user._id) && (
-          <span className="absolute bottom-0 right-0 size-3 bg-green-500 rounded-full ring-2 ring-base-100" />
-        )}
-      </div>
+      <Avatar user={user} size="size-14" className="shrink-0" />
       <div className="flex items-center w-full text-left min-w-0 gap-1">
         <div className="min-w-0">
           <div className="font-medium truncate">{user.fullName}</div>
-          <div className="text-sm truncate">
+          <div className="text-sm truncate text-base-content/55">
             {drafts[user._id] && selectedUser?._id !== user._id ? (
               <span className="text-error">Draft: {drafts[user._id]}</span>
             ) : (
-              <span className="text-zinc-400">
-                {onlineUsers.includes(user._id) ? "Online" : "Offline"}
-              </span>
+              lastMessagePreview(conv)
             )}
           </div>
         </div>
@@ -151,107 +167,98 @@ const Sidebar = () => {
   if (isUsersLoading) return <SidebarSkeleton />;
 
   return (
-    <aside className="h-full w-full md:w-72 lg:w-80 flex flex-col">
-      <div className="border-b border-base-300 w-full p-5">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <Users className="size-6" />
-            <span className="font-medium block">Contacts</span>
-          </div>
+    <aside className="h-full w-full md:w-80 lg:w-96 flex flex-col bg-base-100">
+      {/* search the existing conversations + a clear "new" action */}
+      <div className="p-3 sm:p-4 flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="size-4 absolute left-3.5 top-1/2 -translate-y-1/2 opacity-50" />
+          <input
+            className="w-full bg-base-200 rounded-full pl-10 pr-9 py-2.5 text-[15px] outline-none ring-1 ring-transparent focus:ring-primary/30 transition"
+            placeholder="Search conversations"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {query && (
+            <button onClick={() => setQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2">
+              <X className="size-4 opacity-50" />
+            </button>
+          )}
+        </div>
+        <div className="dropdown dropdown-end">
           <button
-            onClick={() => setShowGroupModal(true)}
-            className="btn btn-ghost btn-xs btn-circle"
-            title="New group"
+            tabIndex={0}
+            className="btn btn-ghost btn-circle text-base-content/70 shrink-0"
+            title="New"
+            aria-label="New conversation"
           >
             <Plus className="size-5" />
           </button>
-        </div>
-        {/* find people by username */}
-        <div className="mt-3 block relative">
-          <div className="relative">
-            <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50" />
-            <input
-              className="input input-sm input-bordered w-full pl-8 pr-7"
-              placeholder="Find people by username…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            {query && (
-              <button
-                onClick={() => setQuery("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2"
-              >
-                <X className="size-4 opacity-50" />
+          <ul
+            tabIndex={0}
+            className="dropdown-content menu bg-base-100 rounded-2xl shadow-pop border border-base-300/60 w-48 mt-2 p-1.5 z-50 [&_li>button]:gap-3 [&_li>button]:rounded-lg [&_li>button]:py-2.5"
+          >
+            <li>
+              <button onClick={() => setShowNewChat(true)}>
+                <UserPlus className="size-4" /> New chat
               </button>
-            )}
-          </div>
-          {query.trim() && (
-            <div className="absolute z-30 mt-1 w-full max-h-60 overflow-y-auto rounded-lg border border-base-300 bg-base-100 shadow">
-              {results.length === 0 ? (
-                <p className="p-3 text-sm opacity-60">No users found</p>
-              ) : (
-                results.map((u) => (
-                  <button
-                    key={u._id}
-                    onClick={() => openSearchResult(u)}
-                    className="flex items-center gap-3 w-full p-2 hover:bg-base-200 text-left"
-                  >
-                    <Avatar user={u} size="size-9" />
-                    <div className="min-w-0">
-                      <div className="font-medium truncate">{u.fullName}</div>
-                      {u.username && <div className="text-xs opacity-60 truncate">@{u.username}</div>}
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
-          )}
+            </li>
+            <li>
+              <button onClick={() => setShowGroupModal(true)}>
+                <UsersRound className="size-4" /> New group
+              </button>
+            </li>
+          </ul>
         </div>
+      </div>
 
-        <div className="mt-3 flex items-center gap-2">
-          <label className="cursor-pointer flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={showOnlineOnly}
-              onChange={(e) => setShowOnlineOnly(e.target.checked)}
-              className="checkbox checkbox-sm"
-            />
-            <span className="text-sm">Show online only</span>
-          </label>
-          <span className="text-xs text-zinc-500">({onlineUsers.length - 1} online)</span>
-        </div>
+      {/* filter tabs */}
+      <div className="px-3 sm:px-4 pb-2 flex gap-2">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              tab === t.key
+                ? "bg-primary text-primary-content"
+                : "bg-base-200 text-base-content/70 hover:bg-base-300"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
       <StatusBar />
 
-      <div className="overflow-y-auto w-full py-3 flex-1">
-        {activeGroups.length > 0 && (
-          <div className="pb-1">
-            <p className="px-3 pb-1 text-xs uppercase opacity-50 block">Groups</p>
-            {activeGroups.map(GroupRow)}
-            <p className="px-3 pt-2 pb-1 text-xs uppercase opacity-50 block">Direct</p>
-          </div>
+      {/* one unified conversation list */}
+      <div className="overflow-y-auto flex-1 px-2 sm:px-2.5 pb-4">
+        {visibleItems.length === 0 ? (
+          <p className="px-4 py-8 text-sm opacity-60 text-center">
+            {query.trim()
+              ? "No conversations match your search"
+              : tab === "groups"
+                ? "No groups yet"
+                : tab === "chats"
+                  ? "No chats yet"
+                  : "No conversations yet"}
+          </p>
+        ) : (
+          visibleItems.map((item) => (item.kind === "group" ? GroupRow(item.c) : UserRow(item.x)))
         )}
 
-        {activeUsers.map((x) => (
-          <UserRow key={x.u._id} {...x} />
-        ))}
-
         {archivedCount > 0 && (
-          <div className="mt-2 border-t border-base-300 pt-2">
+          <div className="mt-2 pt-2 border-t border-base-300/50">
             <button
               onClick={() => setShowArchived((v) => !v)}
-              className="w-full px-3 py-2 flex items-center gap-2 text-sm opacity-70 hover:bg-base-200"
+              className="w-full px-3 py-2.5 flex items-center gap-2.5 text-sm rounded-xl hover:bg-base-200/60 text-base-content/70"
             >
               <Archive className="size-4" />
-              <span className="hidden lg:inline">Archived ({archivedCount})</span>
+              <span className="font-medium">Archived ({archivedCount})</span>
             </button>
             {showArchived && (
               <>
                 {archivedGroups.map(GroupRow)}
-                {archivedUsers.map((x) => (
-                  <UserRow key={x.u._id} {...x} />
-                ))}
+                {archivedUsers.map((x) => UserRow(x))}
               </>
             )}
           </div>
@@ -259,6 +266,7 @@ const Sidebar = () => {
       </div>
 
       {showGroupModal && <CreateGroupModal onClose={() => setShowGroupModal(false)} />}
+      {showNewChat && <NewChatModal onClose={() => setShowNewChat(false)} />}
     </aside>
   );
 };

@@ -15,7 +15,7 @@ const apply = (theme) => {
   document.documentElement.setAttribute("data-theme", theme);
   document
     .querySelector('meta[name="theme-color"]')
-    ?.setAttribute("content", theme === "devdark" ? "#0e1015" : "#ffffff");
+    ?.setAttribute("content", theme === "devdark" ? "#0c1711" : "#ffffff");
 };
 
 const savedMode = (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_KEY)) || "system";

@@ -3,7 +3,7 @@ import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
 import Avatar from "./Avatar";
 import SharedMediaModal from "./SharedMediaModal";
-import { Users, Image as ImageIcon, Mic, AtSign, FolderOpen } from "lucide-react";
+import { Image as ImageIcon, Mic, AtSign, FolderOpen } from "lucide-react";
 import { formatLastSeen } from "../lib/utils";
 
 const Stat = ({ icon, label, value, tint }) => (
@@ -39,9 +39,7 @@ const ChatInfoPanel = () => {
     <aside className="w-80 h-full flex flex-col bg-base-100 overflow-y-auto">
       <div className="p-6 text-center border-b border-base-300/50">
         {isGroup ? (
-          <div className="size-20 rounded-3xl mx-auto grid place-items-center bg-primary/10 text-primary">
-            <Users className="size-9" />
-          </div>
+          <Avatar group src={selectedUser.avatar} name={selectedUser.fullName} size="size-20" className="mx-auto" />
         ) : (
           <Avatar user={selectedUser} size="size-20" className="mx-auto" />
         )}
