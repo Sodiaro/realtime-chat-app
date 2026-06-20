@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 import { useThemeStore } from "../store/useThemeStore";
+import { usePanelStore } from "../store/usePanelStore";
 import Avatar from "./Avatar";
 import ConfirmModal from "./ui/ConfirmModal";
 import {
@@ -27,10 +28,25 @@ const IconNav = ({ to, icon, label }) => {
   );
 };
 
+// same look, but opens a slide-over panel instead of navigating
+const IconBtn = ({ onClick, icon, label, active }) => (
+  <button
+    onClick={onClick}
+    title={label}
+    aria-label={label}
+    className={`btn btn-ghost btn-sm btn-circle ${
+      active ? "bg-primary/10 text-primary" : "text-base-content/60 hover:text-base-content"
+    }`}
+  >
+    {icon}
+  </button>
+);
+
 const Navbar = () => {
   const { logout, authUser } = useAuthStore();
   const { conversations } = useChatStore();
   const { resolved, toggle } = useThemeStore();
+  const { panel, openPanel } = usePanelStore();
   const { pathname } = useLocation();
   const isDark = resolved === "devdark";
   const [confirmLogout, setConfirmLogout] = useState(false);
@@ -69,9 +85,9 @@ const Navbar = () => {
           {authUser && (
             <nav className="flex items-center gap-0.5">
               <IconNav to="/search" icon={<Search className="size-[18px]" />} label="Search" />
-              <IconNav to="/calls" icon={<Phone className="size-[18px]" />} label="Calls" />
-              <IconNav to="/scheduled" icon={<Clock className="size-[18px]" />} label="Scheduled" />
-              <IconNav to="/starred" icon={<Star className="size-[18px]" />} label="Starred" />
+              <IconBtn onClick={() => openPanel("calls")} icon={<Phone className="size-[18px]" />} label="Calls" active={panel === "calls"} />
+              <IconBtn onClick={() => openPanel("scheduled")} icon={<Clock className="size-[18px]" />} label="Scheduled" active={panel === "scheduled"} />
+              <IconBtn onClick={() => openPanel("starred")} icon={<Star className="size-[18px]" />} label="Starred" active={panel === "starred"} />
             </nav>
           )}
 

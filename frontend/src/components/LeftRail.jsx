@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 import { useThemeStore } from "../store/useThemeStore";
+import { usePanelStore } from "../store/usePanelStore";
 import Avatar from "./Avatar";
 import ConfirmModal from "./ui/ConfirmModal";
 import { MessageSquare, Search, Phone, Clock, Star, Sun, Moon, LogOut, Settings, User } from "lucide-react";
@@ -29,11 +30,26 @@ const RailLink = ({ to, icon, label, badge = 0 }) => {
   );
 };
 
+// like RailLink but opens a slide-over panel instead of navigating
+const RailButton = ({ onClick, icon, label, active }) => (
+  <button
+    onClick={onClick}
+    title={label}
+    aria-label={label}
+    className={`size-11 rounded-xl grid place-items-center transition-colors ${
+      active ? "bg-primary text-primary-content" : "text-base-content/60 hover:bg-base-200 hover:text-base-content"
+    }`}
+  >
+    {icon}
+  </button>
+);
+
 // WhatsApp-style vertical icon rail (desktop only — mobile uses the top navbar)
 const LeftRail = () => {
   const { authUser, logout } = useAuthStore();
   const { conversations } = useChatStore();
   const { resolved, toggle } = useThemeStore();
+  const { panel, openPanel } = usePanelStore();
   const isDark = resolved === "devdark";
   const [confirmLogout, setConfirmLogout] = useState(false);
 
@@ -78,9 +94,9 @@ const LeftRail = () => {
 
       <RailLink to="/" icon={<MessageSquare className="size-5" />} label="Chats" badge={totalUnread} />
       <RailLink to="/search" icon={<Search className="size-5" />} label="Search" />
-      <RailLink to="/calls" icon={<Phone className="size-5" />} label="Calls" />
-      <RailLink to="/scheduled" icon={<Clock className="size-5" />} label="Scheduled" />
-      <RailLink to="/starred" icon={<Star className="size-5" />} label="Starred" />
+      <RailButton onClick={() => openPanel("calls")} icon={<Phone className="size-5" />} label="Calls" active={panel === "calls"} />
+      <RailButton onClick={() => openPanel("scheduled")} icon={<Clock className="size-5" />} label="Scheduled" active={panel === "scheduled"} />
+      <RailButton onClick={() => openPanel("starred")} icon={<Star className="size-5" />} label="Starred" active={panel === "starred"} />
 
       <div className="mt-auto flex flex-col items-center gap-2">
         <button

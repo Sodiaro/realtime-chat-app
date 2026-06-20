@@ -22,6 +22,7 @@ import { registerPush } from "./lib/push";
 import CallOverlay from "./components/CallOverlay";
 import StatusViewer from "./components/StatusViewer";
 import CreateStatusModal from "./components/CreateStatusModal";
+import PanelHost from "./components/PanelHost";
 import { useEffect } from "react";
 import { Loader } from "lucide-react";
 import { Toaster } from "react-hot-toast";
@@ -97,6 +98,7 @@ const App = () => {
       <CallOverlay />
       <StatusViewer />
       <CreateStatusModal />
+      <PanelHost />
       <Toaster />
     </div>
   );

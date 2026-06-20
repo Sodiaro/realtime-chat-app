@@ -62,7 +62,20 @@
   background: transparent;
 }
 
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
 @layer utilities {
+  .animate-slide-in-right {
+    animation: slide-in-right 0.22s ease-out;
+  }
+
   /* selectable conversation backgrounds — all token-based so they read well in
      light & dark and keep message text legible */
   .chat-bg-plain {
