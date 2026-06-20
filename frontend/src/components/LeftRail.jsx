@@ -6,7 +6,7 @@ import { useThemeStore } from "../store/useThemeStore";
 import { usePanelStore } from "../store/usePanelStore";
 import Avatar from "./Avatar";
 import ConfirmModal from "./ui/ConfirmModal";
-import { MessageSquare, Search, Phone, Clock, Star, Sun, Moon, LogOut, Settings, User } from "lucide-react";
+import { MessageSquare, UserRound, Phone, Clock, Star, Sun, Moon, LogOut, Settings, User } from "lucide-react";
 
 const RailLink = ({ to, icon, label, badge = 0 }) => {
   const { pathname } = useLocation();
@@ -93,7 +93,7 @@ const LeftRail = () => {
       <div className="h-px w-8 bg-base-300 my-1" />
 
       <RailLink to="/" icon={<MessageSquare className="size-5" />} label="Chats" badge={totalUnread} />
-      <RailLink to="/search" icon={<Search className="size-5" />} label="Search" />
+      <RailButton onClick={() => openPanel("contacts")} icon={<UserRound className="size-5" />} label="Contacts" active={panel === "contacts"} />
       <RailButton onClick={() => openPanel("calls")} icon={<Phone className="size-5" />} label="Calls" active={panel === "calls"} />
       <RailButton onClick={() => openPanel("scheduled")} icon={<Clock className="size-5" />} label="Scheduled" active={panel === "scheduled"} />
       <RailButton onClick={() => openPanel("starred")} icon={<Star className="size-5" />} label="Starred" active={panel === "starred"} />

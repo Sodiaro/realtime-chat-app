@@ -7,28 +7,10 @@ import { usePanelStore } from "../store/usePanelStore";
 import Avatar from "./Avatar";
 import ConfirmModal from "./ui/ConfirmModal";
 import {
-  LogOut, MessageSquare, Settings, User, Shield, Star, Phone, Clock, Search, Sun, Moon,
+  LogOut, MessageSquare, Settings, User, Shield, Star, Phone, Clock, UserRound, Sun, Moon,
 } from "lucide-react";
 
-// compact icon-only nav button with an active state + tooltip
-const IconNav = ({ to, icon, label }) => {
-  const { pathname } = useLocation();
-  const active = pathname === to;
-  return (
-    <Link
-      to={to}
-      title={label}
-      aria-label={label}
-      className={`btn btn-ghost btn-sm btn-circle ${
-        active ? "bg-primary/10 text-primary" : "text-base-content/60 hover:text-base-content"
-      }`}
-    >
-      {icon}
-    </Link>
-  );
-};
-
-// same look, but opens a slide-over panel instead of navigating
+// compact icon-only nav button that opens a slide-over panel
 const IconBtn = ({ onClick, icon, label, active }) => (
   <button
     onClick={onClick}
@@ -84,7 +66,7 @@ const Navbar = () => {
         <div className="flex items-center gap-0.5 sm:gap-1">
           {authUser && (
             <nav className="flex items-center gap-0.5">
-              <IconNav to="/search" icon={<Search className="size-[18px]" />} label="Search" />
+              <IconBtn onClick={() => openPanel("contacts")} icon={<UserRound className="size-[18px]" />} label="Contacts" active={panel === "contacts"} />
               <IconBtn onClick={() => openPanel("calls")} icon={<Phone className="size-[18px]" />} label="Calls" active={panel === "calls"} />
               <IconBtn onClick={() => openPanel("scheduled")} icon={<Clock className="size-[18px]" />} label="Scheduled" active={panel === "scheduled"} />
               <IconBtn onClick={() => openPanel("starred")} icon={<Star className="size-[18px]" />} label="Starred" active={panel === "starred"} />

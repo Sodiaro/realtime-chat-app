@@ -167,7 +167,7 @@ const Sidebar = () => {
   if (isUsersLoading) return <SidebarSkeleton />;
 
   return (
-    <aside className="h-full w-full md:w-80 lg:w-96 flex flex-col bg-base-100">
+    <aside className="h-full w-full flex flex-col bg-base-100">
       {/* search the existing conversations + a clear "new" action */}
       <div className="p-3 sm:p-4 flex items-center gap-2">
         <div className="relative flex-1">

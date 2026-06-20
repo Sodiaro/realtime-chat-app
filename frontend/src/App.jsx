@@ -9,9 +9,6 @@ import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import SettingsPage from "./pages/SettingsPage";
 import ProfilePage from "./pages/ProfilePage";
 import AdminPage from "./pages/AdminPage";
-import StarredPage from "./pages/StarredPage";
-import CallsPage from "./pages/CallsPage";
-import ScheduledPage from "./pages/ScheduledPage";
 import SearchPage from "./pages/SearchPage";
 import JoinGroupPage from "./pages/JoinGroupPage";
 
@@ -88,9 +85,6 @@ const App = () => {
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/profile" element={authUser ? <ProfilePage /> : <Navigate to="/login" />} />
         <Route path="/admin" element={authUser ? <AdminPage /> : <Navigate to="/login" />} />
-        <Route path="/starred" element={authUser ? <StarredPage /> : <Navigate to="/login" />} />
-        <Route path="/calls" element={authUser ? <CallsPage /> : <Navigate to="/login" />} />
-        <Route path="/scheduled" element={authUser ? <ScheduledPage /> : <Navigate to="/login" />} />
         <Route path="/search" element={authUser ? <SearchPage /> : <Navigate to="/login" />} />
         <Route path="/join/:code" element={authUser ? <JoinGroupPage /> : <Navigate to="/login" />} />
       </Routes>

@@ -36,7 +36,7 @@ const ChatInfoPanel = () => {
     : [];
 
   return (
-    <aside className="w-80 h-full flex flex-col bg-base-100 overflow-y-auto">
+    <aside className="w-full h-full flex flex-col bg-base-100 overflow-y-auto">
       <div className="p-6 text-center border-b border-base-300/50">
         {isGroup ? (
           <Avatar group src={selectedUser.avatar} name={selectedUser.fullName} size="size-20" className="mx-auto" />
