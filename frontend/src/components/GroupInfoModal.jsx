@@ -1,8 +1,10 @@
 import { useRef, useState } from "react";
-import { X, UserMinus, LogOut, Plus, Check, Camera, Link as LinkIcon, Copy, RefreshCw, Ban, Shield, ShieldOff, UsersRound } from "lucide-react";
+import { UserMinus, LogOut, Plus, Check, Camera, Link as LinkIcon, Copy, RefreshCw, Ban, Shield, ShieldOff, UsersRound } from "lucide-react";
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
 import Avatar from "./Avatar";
+import Modal from "./ui/Modal";
+import Button from "./ui/Button";
 import toast from "react-hot-toast";
 
 const GroupInfoModal = ({ conversation, onClose }) => {
@@ -70,19 +72,16 @@ const GroupInfoModal = ({ conversation, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div
-        className="bg-base-100 rounded-xl w-96 max-h-[88vh] flex flex-col overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between p-3 border-b border-base-300">
-          <h3 className="font-medium">Group info</h3>
-          <button onClick={onClose}>
-            <X className="size-5" />
-          </button>
-        </div>
-
-        <div className="p-4 space-y-4 overflow-y-auto">
+    <Modal
+      title="Group info"
+      onClose={onClose}
+      footer={
+        <Button variant="error" size="sm" onClick={doLeave} className="w-full gap-2">
+          <LogOut className="size-4" /> Leave group
+        </Button>
+      }
+    >
+      <div className="space-y-4">
           {/* photo */}
           <div className="flex flex-col items-center">
             <div className="relative">
@@ -243,15 +242,8 @@ const GroupInfoModal = ({ conversation, onClose }) => {
               ))}
             </div>
           </div>
-        </div>
-
-        <div className="p-3 border-t border-base-300">
-          <button onClick={doLeave} className="btn btn-error btn-sm btn-outline w-full gap-2">
-            <LogOut className="size-4" /> Leave group
-          </button>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 };
 

@@ -62,21 +62,19 @@ const SignUpPage = () => {
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
       {/* left side */}
-      <div className="flex flex-col justify-center items-center p-6 sm:p-12">
-        <div className="w-full max-w-md space-y-8">
-          {/* LOGO */}
-          <div className="text-center mb-8">
-            <div className="flex flex-col items-center gap-2 group">
-              <div
-                className="size-12 rounded-xl bg-primary/10 flex items-center justify-center 
-              group-hover:bg-primary/20 transition-colors"
-              >
-                <MessageSquare className="size-6 text-primary" />
+      <div className="flex flex-col justify-center items-center p-6 sm:p-12 bg-base-200/30">
+        <div className="w-full max-w-md">
+          <div className="bg-base-100 border border-base-300/60 rounded-2xl shadow-card p-7 sm:p-8 space-y-7">
+            {/* LOGO */}
+            <div className="text-center">
+              <div className="flex flex-col items-center gap-2">
+                <div className="size-12 rounded-2xl bg-primary/15 flex items-center justify-center">
+                  <MessageSquare className="size-6 text-primary" />
+                </div>
+                <h1 className="text-2xl font-bold mt-2 tracking-tight">Create account</h1>
+                <p className="text-base-content/60">Get started with your free account</p>
               </div>
-              <h1 className="text-2xl font-bold mt-2">Create Account</h1>
-              <p className="text-base-content/60">Get started with your free account</p>
             </div>
-          </div>
 
           {pendingEmail ? (
             <OtpForm email={pendingEmail} />
@@ -192,14 +190,14 @@ const SignUpPage = () => {
           </form>
           )}
 
-          <div className="text-center">
-            <p className="text-base-content/60">
-              Already have an account?{" "}
-              <Link to="/login" className="link link-primary">
-                Sign in
-              </Link>
-            </p>
           </div>
+
+          <p className="text-center text-sm text-base-content/60 mt-6">
+            Already have an account?{" "}
+            <Link to="/login" className="link link-primary font-medium">
+              Sign in
+            </Link>
+          </p>
         </div>
       </div>
 

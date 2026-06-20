@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Navigate } from "react-router-dom";
 import { axiosInstance } from "../lib/axios";
 import { useAuthStore } from "../store/useAuthStore";
+import PageHeader from "../components/ui/PageHeader";
 import { Star } from "lucide-react";
 import { formatMessageTime } from "../lib/utils";
 
@@ -30,9 +31,7 @@ const StarredPage = () => {
 
   return (
     <div className="max-w-2xl mx-auto pt-24 px-4 pb-10">
-      <h1 className="text-2xl font-bold mb-4 flex items-center gap-2">
-        <Star className="size-6 text-amber-400 fill-amber-400" /> Starred messages
-      </h1>
+      <PageHeader icon={Star} title="Starred messages" subtitle="Messages you've saved for later" />
       {loading ? (
         <p>Loading…</p>
       ) : items.length === 0 ? (

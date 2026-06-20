@@ -4,6 +4,7 @@ import { axiosInstance } from "../lib/axios";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 import Avatar from "../components/Avatar";
+import PageHeader from "../components/ui/PageHeader";
 import { Search, UsersRound } from "lucide-react";
 import { formatMessageTime } from "../lib/utils";
 
@@ -61,9 +62,7 @@ const SearchPage = () => {
 
   return (
     <div className="max-w-2xl mx-auto pt-24 px-4 pb-10">
-      <h1 className="text-2xl font-bold mb-3 flex items-center gap-2">
-        <Search className="size-6" /> Search messages
-      </h1>
+      <PageHeader icon={Search} title="Search messages" subtitle="Find messages across all your chats" />
 
       <div className="relative mb-4">
         <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 opacity-50" />

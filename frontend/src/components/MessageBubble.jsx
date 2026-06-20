@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Check, CheckCheck, Pencil, Trash2, SmilePlus, X, Reply, Forward, Pin, Flag, Star, FileText, Download, MapPin, MessageSquare } from "lucide-react";
+import { memo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
+import { Check, CheckCheck, Clock, AlertCircle, Pencil, Trash2, SmilePlus, X, Reply, Forward, Pin, Flag, Star, FileText, Download, MapPin, MessageSquare } from "lucide-react";
 import { useChatStore } from "../store/useChatStore";
 import { formatMessageTime } from "../lib/utils";
 import Avatar from "./Avatar";
@@ -20,9 +21,25 @@ const renderText = (text) =>
     )
   );
 
-const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
-  const { editMessage, deleteMessage, reactToMessage, setReplyingTo, setForwarding, pinMessage, reportMessage, starMessage, votePoll, setSelectedUser } =
-    useChatStore();
+const MessageBubble = ({ message, isOwn, authUser, selectedUser, users, grouped = false }) => {
+  // select stable action refs only, so memo() isn't defeated by whole-store subscription
+  const {
+    editMessage, deleteMessage, reactToMessage, setReplyingTo, setForwarding,
+    pinMessage, reportMessage, starMessage, votePoll, setSelectedUser,
+  } = useChatStore(
+    useShallow((s) => ({
+      editMessage: s.editMessage,
+      deleteMessage: s.deleteMessage,
+      reactToMessage: s.reactToMessage,
+      setReplyingTo: s.setReplyingTo,
+      setForwarding: s.setForwarding,
+      pinMessage: s.pinMessage,
+      reportMessage: s.reportMessage,
+      starMessage: s.starMessage,
+      votePoll: s.votePoll,
+      setSelectedUser: s.setSelectedUser,
+    }))
+  );
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(message.text || "");
   const [showPicker, setShowPicker] = useState(false);
@@ -70,7 +87,7 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
     setSelectedUser({ _id: c.userId, fullName: c.name, username: c.username, profilePic: c.avatar });
 
   // group reactions by emoji → { "👍": 2, ... }
-  const grouped = (message.reactions || []).reduce((acc, r) => {
+  const reactionCounts = (message.reactions || []).reduce((acc, r) => {
     acc[r.emoji] = (acc[r.emoji] || 0) + 1;
     return acc;
   }, {});
@@ -78,15 +95,19 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
   return (
     <div className={`chat ${isOwn ? "chat-end" : "chat-start"} group`}>
       <div className="chat-image">
-        <Avatar
-          src={avatar}
-          name={isOwn ? authUser.fullName : isGroup ? sender?.fullName : selectedUser.fullName}
-          user={isOwn ? authUser : isGroup ? sender : selectedUser}
-          size="size-10"
-        />
+        {grouped ? (
+          <div className="size-10" aria-hidden />
+        ) : (
+          <Avatar
+            src={avatar}
+            name={isOwn ? authUser.fullName : isGroup ? sender?.fullName : selectedUser.fullName}
+            user={isOwn ? authUser : isGroup ? sender : selectedUser}
+            size="size-10"
+          />
+        )}
       </div>
 
-      <div className="chat-header mb-1 flex items-center gap-1">
+      <div className={`chat-header mb-1 flex items-center gap-1 ${grouped ? "hidden" : ""}`}>
         {isGroup && !isOwn && (
           <span className="text-xs font-medium opacity-70">{sender?.fullName || "Member"}</span>
         )}
@@ -94,9 +115,19 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
         {message.pinnedAt && !isDeleted && <Pin className="size-3 text-amber-500" title="Pinned" />}
         <time className="text-xs opacity-50 ml-1">{formatMessageTime(message.createdAt)}</time>
         {message.editedAt && !isDeleted && <span className="text-xs opacity-40">(edited)</span>}
+        {isOwn && message.pending && (
+          <Clock className="size-3 opacity-50 animate-pulse" title="Sending…" />
+        )}
+        {isOwn && message.failed && (
+          <span className="text-error inline-flex items-center gap-0.5 text-[11px]" title="Failed to send">
+            <AlertCircle className="size-3" /> Failed
+          </span>
+        )}
         {isOwn &&
           !isGroup &&
           !isDeleted &&
+          !message.pending &&
+          !message.failed &&
           (message.readAt ? (
             <CheckCheck className="size-3.5 text-sky-500" title="Seen" />
           ) : message.deliveredAt ? (
@@ -104,7 +135,7 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
           ) : (
             <Check className="size-3.5 opacity-50" title="Sent" />
           ))}
-        {isOwn && isGroup && !isDeleted && readers.length > 0 && (
+        {isOwn && isGroup && !isDeleted && !message.pending && readers.length > 0 && (
           <span className="text-xs opacity-50 flex items-center gap-0.5" title={`Seen by ${readers.map(nameFor).join(", ")}`}>
             <CheckCheck className="size-3.5 text-sky-500" /> {readers.length}
           </span>
@@ -333,9 +364,9 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
       </div>
 
       {/* reaction chips */}
-      {Object.keys(grouped).length > 0 && (
+      {Object.keys(reactionCounts).length > 0 && (
         <div className="chat-footer flex gap-1 mt-1">
-          {Object.entries(grouped).map(([emoji, count]) => (
+          {Object.entries(reactionCounts).map(([emoji, count]) => (
             <button
               key={emoji}
               onClick={() => react(emoji)}
@@ -352,4 +383,4 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users }) => {
   );
 };
 
-export default MessageBubble;
+export default memo(MessageBubble);

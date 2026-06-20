@@ -3,6 +3,7 @@ import { Navigate } from "react-router-dom";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 import Avatar from "../components/Avatar";
+import PageHeader from "../components/ui/PageHeader";
 import { Clock, Trash2, Image as ImageIcon, Paperclip, UsersRound } from "lucide-react";
 
 const fmtWhen = (d) => new Date(d).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
@@ -42,12 +43,11 @@ const ScheduledPage = () => {
 
   return (
     <div className="max-w-2xl mx-auto pt-24 px-4 pb-10">
-      <h1 className="text-2xl font-bold mb-1 flex items-center gap-2">
-        <Clock className="size-6" /> Scheduled messages
-      </h1>
-      <p className="opacity-60 text-sm mb-4">
-        Messages waiting to be delivered. They send automatically at the chosen time.
-      </p>
+      <PageHeader
+        icon={Clock}
+        title="Scheduled messages"
+        subtitle="Waiting to be delivered — they send automatically at the chosen time."
+      />
 
       {loading ? (
         <p>Loading…</p>

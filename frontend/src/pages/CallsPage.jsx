@@ -3,6 +3,7 @@ import { Navigate } from "react-router-dom";
 import { axiosInstance } from "../lib/axios";
 import { useAuthStore } from "../store/useAuthStore";
 import Avatar from "../components/Avatar";
+import PageHeader from "../components/ui/PageHeader";
 import { Phone, Video, PhoneIncoming, PhoneOutgoing, PhoneMissed } from "lucide-react";
 
 const fmtDur = (s) => (s ? `${Math.floor(s / 60)}m ${s % 60}s` : "");
@@ -33,9 +34,7 @@ const CallsPage = () => {
 
   return (
     <div className="max-w-2xl mx-auto pt-24 px-4 pb-10">
-      <h1 className="text-2xl font-bold mb-4 flex items-center gap-2">
-        <Phone className="size-6" /> Call history
-      </h1>
+      <PageHeader icon={Phone} title="Call history" subtitle="Your recent voice and video calls" />
       {loading ? (
         <p>Loading…</p>
       ) : calls.length === 0 ? (

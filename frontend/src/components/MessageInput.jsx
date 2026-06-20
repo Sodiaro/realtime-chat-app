@@ -22,6 +22,7 @@ const MessageInput = () => {
   const [seconds, setSeconds] = useState(0);
   const fileInputRef = useRef(null);
   const docInputRef = useRef(null);
+  const textareaRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
@@ -33,10 +34,22 @@ const MessageInput = () => {
   const { getDraft, setDraft, clearDraft } = useDraftStore();
   const chatId = selectedUser?._id;
 
+  // grow the textarea with its content, capped at ~6 lines
+  const autoGrow = (el) => {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
+  };
+
   // load this chat's saved draft when switching conversations
   useEffect(() => {
     setText(getDraft(chatId));
   }, [chatId, getDraft]);
+
+  // keep the textarea height in sync with its content (draft load, send-clear, etc.)
+  useEffect(() => {
+    autoGrow(textareaRef.current);
+  }, [text, chatId]);
 
   // DMs can be blocked; groups can't
   const isBlocked =
@@ -115,6 +128,7 @@ const MessageInput = () => {
   // emit "typing" on keystroke, auto-clear after a short idle gap
   const handleTextChange = (e) => {
     setText(e.target.value);
+    autoGrow(e.target);
     setDraft(chatId, e.target.value); // persist unsent text per chat
     emitTyping(true);
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -174,6 +188,14 @@ const MessageInput = () => {
       if (docInputRef.current) docInputRef.current.value = "";
     } catch (error) {
       console.error("Failed to send message:", error);
+    }
+  };
+
+  // Enter sends; Shift+Enter inserts a newline (ignored mid-IME-composition)
+  const onComposerKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      handleSendMessage(e);
     }
   };
 
@@ -240,7 +262,7 @@ const MessageInput = () => {
   }
 
   return (
-    <div className="p-4 w-full">
+    <div className="p-3 sm:p-4 w-full border-t border-base-300/60 bg-base-100">
       {replyingTo && !recording && (
         <div className="mb-2 flex items-center gap-2 rounded-lg bg-base-200 px-3 py-2">
           <Reply className="size-4 shrink-0 opacity-60" />
@@ -300,14 +322,17 @@ const MessageInput = () => {
           </button>
         </div>
       ) : (
-        <form onSubmit={handleSendMessage} className="flex items-center gap-2">
-          <div className="flex-1 flex items-center gap-1 bg-base-200 rounded-full pl-4 pr-1.5 py-1">
-            <input
-              type="text"
-              className="flex-1 bg-transparent outline-none text-sm py-2 min-w-0"
-              placeholder="Write your message…"
+        <form onSubmit={handleSendMessage} className="flex items-end gap-2">
+          <div className="flex-1 flex items-end gap-1 bg-base-200/70 rounded-2xl pl-4 pr-1.5 py-1 ring-1 ring-base-300/50 focus-within:ring-2 focus-within:ring-primary/30 transition-shadow">
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              aria-label="Message"
+              className="flex-1 bg-transparent outline-none text-sm py-2 min-w-0 resize-none leading-5 max-h-[140px] overflow-y-auto"
+              placeholder="Write your message…   (Shift+Enter for a new line)"
               value={text}
               onChange={handleTextChange}
+              onKeyDown={onComposerKeyDown}
               onBlur={stopTyping}
             />
             <input

@@ -36,6 +36,8 @@ export const useChatStore = create((set, get) => ({
   selectedUser: null, // a user (DM) or a group-shaped object { isGroup, _id, fullName }
   isUsersLoading: false,
   isMessagesLoading: false,
+  nextCursor: null, // cursor for loading older messages (scroll-up)
+  isLoadingOlder: false,
   isTyping: false,
   isRecordingPeer: false, // the other user is recording a voice note
   replyingTo: null, // message being replied to
@@ -83,14 +85,17 @@ export const useChatStore = create((set, get) => ({
   },
 
   getMessages: async (id) => {
-    set({ isMessagesLoading: true });
+    set({ isMessagesLoading: true, nextCursor: null });
     const { selectedUser } = get();
     try {
       const url = selectedUser?.isGroup
         ? `/messages/conversation/${selectedUser._id}`
         : `/messages/${id}`;
       const res = await axiosInstance.get(url);
-      set({ messages: res.data.messages ?? res.data });
+      set({
+        messages: res.data.messages ?? res.data,
+        nextCursor: res.data.nextCursor ?? null,
+      });
 
       // opening a chat clears its unread badge (server already zeroed it)
       const sel = get().selectedUser;
@@ -109,16 +114,83 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
+  // load an older page (scroll-up). Returns true when it prepended messages,
+  // so the caller can restore scroll position.
+  loadOlderMessages: async () => {
+    const { selectedUser, nextCursor, isLoadingOlder, messages } = get();
+    if (!selectedUser || !nextCursor || isLoadingOlder) return false;
+    set({ isLoadingOlder: true });
+    try {
+      const base = selectedUser.isGroup
+        ? `/messages/conversation/${selectedUser._id}`
+        : `/messages/${selectedUser._id}`;
+      const res = await axiosInstance.get(base, { params: { cursor: nextCursor } });
+      const older = res.data.messages ?? [];
+      // drop any ids we already have, then prepend (older first)
+      const have = new Set(messages.map((m) => m._id));
+      const fresh = older.filter((m) => !have.has(m._id));
+      set({ messages: [...fresh, ...messages], nextCursor: res.data.nextCursor ?? null });
+      return fresh.length > 0;
+    } catch {
+      return false;
+    } finally {
+      set({ isLoadingOlder: false });
+    }
+  },
+
   sendMessage: async (messageData) => {
     const { selectedUser, messages } = get();
+    const myId = useAuthStore.getState().authUser?._id;
+    const url = selectedUser.isGroup
+      ? `/messages/conversation/${selectedUser._id}`
+      : `/messages/send/${selectedUser._id}`;
+
+    // show plain text/image instantly; richer types need server processing first
+    const canOptimistic =
+      (messageData.text || messageData.image) &&
+      !messageData.poll &&
+      !messageData.file &&
+      !messageData.audio &&
+      !messageData.location &&
+      !messageData.contact;
+
+    let tempId = null;
+    if (canOptimistic) {
+      tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const optimistic = {
+        _id: tempId,
+        conversationId: selectedUser.isGroup ? selectedUser._id : undefined,
+        senderId: myId,
+        receiverId: selectedUser.isGroup ? undefined : selectedUser._id,
+        text: messageData.text,
+        image: messageData.image,
+        reactions: [],
+        readBy: [],
+        starredBy: [],
+        createdAt: new Date().toISOString(),
+        pending: true,
+      };
+      set({ messages: [...messages, optimistic], replyingTo: null });
+    }
+
     try {
-      const url = selectedUser.isGroup
-        ? `/messages/conversation/${selectedUser._id}`
-        : `/messages/send/${selectedUser._id}`;
       const res = await axiosInstance.post(url, messageData);
-      set({ messages: upsert(messages, res.data), replyingTo: null });
+      set({
+        messages: tempId
+          ? get().messages.map((m) => (m._id === tempId ? res.data : m)) // swap temp → real
+          : upsert(get().messages, res.data),
+        replyingTo: null,
+      });
       get().touchConversation(res.data.conversationId); // move chat to top
     } catch (error) {
+      if (tempId) {
+        // leave the bubble visible, flagged as failed
+        set({
+          messages: get().messages.map((m) =>
+            m._id === tempId ? { ...m, pending: false, failed: true } : m
+          ),
+        });
+      }
       toast.error(error.response?.data?.message || "Failed to send message");
     }
   },

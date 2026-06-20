@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { X, Type, Image as ImageIcon } from "lucide-react";
+import { Type, Image as ImageIcon } from "lucide-react";
 import { useStatusStore } from "../store/useStatusStore";
+import Modal from "./ui/Modal";
+import Button from "./ui/Button";
 
 const COLORS = ["#16a34a", "#2563eb", "#db2777", "#ea580c", "#7c3aed", "#0891b2", "#1f2937"];
 
@@ -39,79 +41,75 @@ const CreateStatusModal = () => {
     setImage(null);
   };
 
+  const tabBtn = (key, Icon, label) => (
+    <button
+      className={`flex-1 py-2 text-sm flex items-center justify-center gap-1.5 transition-colors ${
+        tab === key ? "border-b-2 border-primary text-primary font-medium" : "opacity-60 hover:opacity-100"
+      }`}
+      onClick={() => setTab(key)}
+    >
+      <Icon className="size-4" /> {label}
+    </button>
+  );
+
   return (
-    <div className="fixed inset-0 z-[65] grid place-items-center bg-black/50" onClick={close}>
-      <div className="bg-base-100 rounded-xl w-80 overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-3 border-b border-base-300">
-          <h3 className="font-medium">Add to status</h3>
-          <button onClick={close}>
-            <X className="size-5" />
-          </button>
-        </div>
-
-        <div className="flex border-b border-base-300">
-          <button
-            className={`flex-1 py-2 text-sm flex items-center justify-center gap-1 ${tab === "text" ? "border-b-2 border-primary text-primary" : "opacity-60"}`}
-            onClick={() => setTab("text")}
-          >
-            <Type className="size-4" /> Text
-          </button>
-          <button
-            className={`flex-1 py-2 text-sm flex items-center justify-center gap-1 ${tab === "image" ? "border-b-2 border-primary text-primary" : "opacity-60"}`}
-            onClick={() => setTab("image")}
-          >
-            <ImageIcon className="size-4" /> Photo
-          </button>
-        </div>
-
-        <div className="p-4 space-y-3">
-          {tab === "text" ? (
-            <>
-              <div
-                className="rounded-xl h-40 grid place-items-center p-4 text-white text-center"
-                style={{ background: bg }}
-              >
-                <textarea
-                  className="bg-transparent outline-none text-center w-full resize-none placeholder-white/60"
-                  placeholder="Type a status…"
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  maxLength={200}
-                />
-              </div>
-              <div className="flex gap-2 justify-center">
-                {COLORS.map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => setBg(c)}
-                    className={`size-6 rounded-full ${bg === c ? "ring-2 ring-offset-2 ring-base-content" : ""}`}
-                    style={{ background: c }}
-                  />
-                ))}
-              </div>
-            </>
-          ) : (
-            <div className="space-y-2">
-              {image ? (
-                <img src={image} alt="" className="rounded-xl max-h-48 mx-auto" />
-              ) : (
-                <label className="rounded-xl h-40 border-2 border-dashed border-base-300 grid place-items-center cursor-pointer">
-                  <span className="opacity-60 text-sm">Choose a photo</span>
-                  <input type="file" accept="image/*" className="hidden" onChange={onImage} />
-                </label>
-              )}
-            </div>
-          )}
-          <button
-            onClick={submit}
-            disabled={tab === "text" ? !text.trim() : !image}
-            className="btn btn-primary btn-sm w-full"
-          >
-            Post status
-          </button>
-        </div>
+    <Modal
+      title="Add to status"
+      onClose={close}
+      size="sm"
+      footer={
+        <Button
+          onClick={submit}
+          disabled={tab === "text" ? !text.trim() : !image}
+          size="sm"
+          className="w-full"
+        >
+          Post status
+        </Button>
+      }
+    >
+      <div className="-mt-1 -mx-5 mb-4 flex border-b border-base-300">
+        {tabBtn("text", Type, "Text")}
+        {tabBtn("image", ImageIcon, "Photo")}
       </div>
-    </div>
+
+      {tab === "text" ? (
+        <div className="space-y-3">
+          <div
+            className="rounded-xl h-44 grid place-items-center p-4 text-white text-center"
+            style={{ background: bg }}
+          >
+            <textarea
+              className="bg-transparent outline-none text-center w-full resize-none placeholder-white/60 text-lg font-medium"
+              placeholder="Type a status…"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              maxLength={200}
+            />
+          </div>
+          <div className="flex gap-2 justify-center">
+            {COLORS.map((c) => (
+              <button
+                key={c}
+                onClick={() => setBg(c)}
+                aria-label={`Background ${c}`}
+                className={`size-6 rounded-full transition-transform hover:scale-110 ${
+                  bg === c ? "ring-2 ring-offset-2 ring-offset-base-100 ring-base-content" : ""
+                }`}
+                style={{ background: c }}
+              />
+            ))}
+          </div>
+        </div>
+      ) : image ? (
+        <img src={image} alt="" className="rounded-xl max-h-52 mx-auto" />
+      ) : (
+        <label className="rounded-xl h-44 border-2 border-dashed border-base-300 grid place-items-center cursor-pointer hover:bg-base-200/50 transition-colors">
+          <span className="opacity-60 text-sm">Choose a photo</span>
+          <input type="file" accept="image/*" className="hidden" onChange={onImage} />
+        </label>
+      )}
+    </Modal>
   );
 };
 

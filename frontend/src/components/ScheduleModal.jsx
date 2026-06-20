@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { X, Clock } from "lucide-react";
 import { useChatStore } from "../store/useChatStore";
+import Modal from "./ui/Modal";
+import Button from "./ui/Button";
 
 // format a Date as the value a datetime-local input expects (local time)
 const toLocalInput = (d) => {
@@ -50,56 +51,47 @@ const ScheduleModal = ({ text, image, file, onClose, onScheduled }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[80] grid place-items-center bg-black/50 p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-sm rounded-2xl bg-base-100 p-5 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold flex items-center gap-2">
-            <Clock className="size-5 text-primary" /> Schedule message
-          </h3>
-          <button onClick={onClose}>
-            <X className="size-5" />
-          </button>
-        </div>
-
-        <p className="text-sm opacity-70 mb-2 line-clamp-2">
-          {text?.trim() || (image ? "📷 Photo" : file ? `📎 ${file.name}` : "")}
-        </p>
-
-        <div className="grid grid-cols-2 gap-2 mb-4">
-          {PRESETS.map((p) => (
-            <button
-              key={p.label}
-              type="button"
-              onClick={() => setWhen(toLocalInput(p.at()))}
-              className="btn btn-sm btn-outline"
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-
-        <label className="text-sm font-medium">Send at</label>
-        <input
-          type="datetime-local"
-          value={when}
-          min={toLocalInput(plus(1))}
-          onChange={(e) => setWhen(e.target.value)}
-          className="input input-bordered w-full mt-1"
-        />
-
-        <div className="mt-5 flex justify-end gap-2">
-          <button onClick={onClose} className="btn btn-ghost btn-sm">
+    <Modal
+      title="Schedule message"
+      onClose={onClose}
+      size="sm"
+      footer={
+        <>
+          <Button variant="ghost" size="sm" onClick={onClose}>
             Cancel
-          </button>
-          <button onClick={submit} disabled={saving} className="btn btn-primary btn-sm">
+          </Button>
+          <Button size="sm" onClick={submit} loading={saving}>
             {saving ? "Scheduling…" : "Schedule"}
+          </Button>
+        </>
+      }
+    >
+      <p className="text-sm opacity-70 mb-3 line-clamp-2">
+        {text?.trim() || (image ? "📷 Photo" : file ? `📎 ${file.name}` : "")}
+      </p>
+
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        {PRESETS.map((p) => (
+          <button
+            key={p.label}
+            type="button"
+            onClick={() => setWhen(toLocalInput(p.at()))}
+            className="btn btn-sm btn-outline"
+          >
+            {p.label}
           </button>
-        </div>
+        ))}
       </div>
-    </div>
+
+      <label className="text-sm font-medium">Send at</label>
+      <input
+        type="datetime-local"
+        value={when}
+        min={toLocalInput(plus(1))}
+        onChange={(e) => setWhen(e.target.value)}
+        className="input input-bordered w-full mt-1"
+      />
+    </Modal>
   );
 };
 

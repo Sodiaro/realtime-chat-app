@@ -17,7 +17,6 @@ import JoinGroupPage from "./pages/JoinGroupPage";
 import { useAuthStore } from "./store/useAuthStore";
 import { useChatStore } from "./store/useChatStore";
 import { useCallStore } from "./store/useCallStore";
-import { useThemeStore} from "./store/useThemeStore";
 import { registerPush } from "./lib/push";
 import CallOverlay from "./components/CallOverlay";
 import StatusViewer from "./components/StatusViewer";
@@ -30,7 +29,6 @@ const App = () => {
   const { authUser, checkAuth, isCheckingAuth, socket } = useAuthStore();
   const { subscribeSocket, unsubscribeSocket, conversations } = useChatStore();
   const { subscribeCall, unsubscribeCall } = useCallStore();
-  const { theme } = useThemeStore();
 
   // total unread across non-archived conversations → browser tab title
   const totalUnread = conversations.reduce(
@@ -72,12 +70,12 @@ const App = () => {
 
   if (isCheckingAuth && !authUser)
     return (
-      <div className="flex items-center justify-center h-screen">
-        <Loader className="size-10 animate-spin" />
+      <div className="flex items-center justify-center h-screen bg-base-100">
+        <Loader className="size-10 animate-spin text-primary" />
       </div>
     );
   return (
-    <div data-theme= {theme} >
+    <div className="min-h-screen bg-base-100 text-base-content">
       <Navbar />
 
       <Routes>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Search, Ban, Users, MoreVertical, BellOff, Bell, Archive, Info, UserRound, Timer, Phone, Video, Pin } from "lucide-react";
+import { X, Search, Ban, Users, MoreVertical, BellOff, Bell, Archive, Info, UserRound, Timer, Phone, Video, Pin, ArrowLeft } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 import { useCallStore } from "../store/useCallStore";
@@ -56,11 +56,19 @@ const ChatHeader = () => {
 
   return (
     <div className="p-2.5 border-b border-base-300">
-      <div className="flex items-center justify-between">
-        <div
-          className={`flex items-center gap-3 ${!isGroup ? "cursor-pointer" : ""}`}
-          onClick={() => !isGroup && setShowProfile(true)}
-        >
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1 min-w-0">
+          <button
+            onClick={() => setSelectedUser(null)}
+            aria-label="Back to chats"
+            className="btn btn-ghost btn-sm btn-circle md:hidden -ml-1 shrink-0"
+          >
+            <ArrowLeft className="size-5" />
+          </button>
+          <div
+            className={`flex items-center gap-3 min-w-0 ${!isGroup ? "cursor-pointer" : ""}`}
+            onClick={() => !isGroup && setShowProfile(true)}
+          >
           {isGroup ? (
             selectedUser.avatar ? (
               <img src={selectedUser.avatar} alt="" className="size-10 rounded-full object-cover" />
@@ -90,9 +98,10 @@ const ChatHeader = () => {
                     : formatLastSeen(selectedUser.lastSeen)}
             </p>
           </div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 shrink-0">
           {!isGroup && (
             <>
               <button onClick={() => startCall(selectedUser, false)} title="Voice call">
