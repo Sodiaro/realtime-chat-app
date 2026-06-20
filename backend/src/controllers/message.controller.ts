@@ -538,6 +538,34 @@ export const searchMessages: RequestHandler = async (req, res, next) => {
   }
 };
 
+// all shared media/files/links in a conversation (whole history, not just the page)
+export const getSharedMedia: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const { conversationId } = req.params;
+    const type = String(req.query.type || "media");
+
+    const conv = await Conversation.findById(conversationId).select("participants").lean();
+    if (!conv || !conv.participants.map(String).includes(myId)) {
+      return void res.status(403).json({ message: "Not a participant" });
+    }
+
+    const filter: Record<string, unknown> = { conversationId, deletedAt: { $exists: false } };
+    if (type === "files") filter.file = { $exists: true, $ne: null };
+    else if (type === "links") filter.linkPreview = { $exists: true, $ne: null };
+    else filter.image = { $exists: true, $ne: null }; // "media" = photos
+
+    const items = await Message.find(filter)
+      .sort({ createdAt: -1 })
+      .limit(120)
+      .select("image file linkPreview senderId createdAt")
+      .lean();
+    res.status(200).json(items);
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const pinMessage: RequestHandler = async (req, res, next) => {
   try {
     const myId = String(req.user!._id);

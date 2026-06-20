@@ -4,6 +4,7 @@ declare global {
   namespace Express {
     interface Request {
       user?: IUser;
+      sessionId?: string; // the device session this request's token belongs to
     }
   }
 }

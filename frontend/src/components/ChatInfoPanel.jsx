@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
 import Avatar from "./Avatar";
-import { Users, Image as ImageIcon, Mic, AtSign } from "lucide-react";
+import SharedMediaModal from "./SharedMediaModal";
+import { Users, Image as ImageIcon, Mic, AtSign, FolderOpen } from "lucide-react";
 import { formatLastSeen } from "../lib/utils";
 
 const Stat = ({ icon, label, value, tint }) => (
@@ -17,12 +19,15 @@ const Stat = ({ icon, label, value, tint }) => (
 const ChatInfoPanel = () => {
   const { selectedUser, messages, users } = useChatStore();
   const { onlineUsers } = useAuthStore();
+  const [showShared, setShowShared] = useState(false);
   if (!selectedUser) return null;
 
   const isGroup = selectedUser.isGroup;
   const isOnline = onlineUsers.includes(selectedUser._id);
   const images = messages.filter((m) => m.image && !m.deletedAt);
   const voices = messages.filter((m) => m.audio && !m.deletedAt);
+  // group id is the conversation id; for DMs read it off a loaded message
+  const conversationId = isGroup ? selectedUser._id : messages.find((m) => m.conversationId)?.conversationId;
 
   const members = isGroup
     ? (selectedUser.participants || []).map((p) =>
@@ -59,10 +64,22 @@ const ChatInfoPanel = () => {
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 p-4">
+      <div className="grid grid-cols-2 gap-3 p-4 pb-2">
         <Stat icon={<ImageIcon className="size-4" />} label="Photos" value={images.length} tint="bg-teal-500/10" />
         <Stat icon={<Mic className="size-4" />} label="Voice" value={voices.length} tint="bg-amber-500/10" />
       </div>
+
+      {conversationId && (
+        <div className="px-4 pb-2">
+          <button
+            onClick={() => setShowShared(true)}
+            className="w-full flex items-center gap-2 rounded-xl border border-base-300 px-3 py-2.5 text-sm hover:bg-base-200 transition-colors"
+          >
+            <FolderOpen className="size-4 text-primary" />
+            View shared media, files & links
+          </button>
+        </div>
+      )}
 
       {images.length > 0 && (
         <div className="px-4 pb-4">
@@ -92,6 +109,10 @@ const ChatInfoPanel = () => {
             ))}
           </div>
         </div>
+      )}
+
+      {showShared && conversationId && (
+        <SharedMediaModal conversationId={conversationId} onClose={() => setShowShared(false)} />
       )}
     </aside>
   );

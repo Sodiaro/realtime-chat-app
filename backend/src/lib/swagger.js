@@ -205,6 +205,17 @@ export const openapiSpec = {
           createdAt: { type: "string", format: "date-time" },
         },
       },
+      Session: {
+        type: "object",
+        properties: {
+          _id: ID,
+          userAgent: { type: "string" },
+          ip: { type: "string" },
+          createdAt: { type: "string", format: "date-time" },
+          lastSeenAt: { type: "string", format: "date-time" },
+          current: { type: "boolean", description: "true for the device making this request" },
+        },
+      },
       Error: { type: "object", properties: { message: { type: "string" } } },
     },
   },
@@ -339,6 +350,23 @@ export const openapiSpec = {
         summary: "Log out of all other devices (bumps tokenVersion)",
         security: auth,
         responses: { 200: ok("Done") },
+      },
+    },
+    "/api/auth/sessions": {
+      get: {
+        tags: ["Account"],
+        summary: "List active device sessions",
+        security: auth,
+        responses: { 200: ok("Active sessions, newest activity first", arrayOf("Session")) },
+      },
+    },
+    "/api/auth/sessions/{id}": {
+      delete: {
+        tags: ["Account"],
+        summary: "Revoke a device session (logs that device out)",
+        security: auth,
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: ok("Revoked", { type: "object", properties: { revoked: { type: "boolean" } } }) },
       },
     },
     "/api/auth/me": {
@@ -532,6 +560,18 @@ export const openapiSpec = {
           }),
         },
         responses: { 201: ok("Created group", ref("Conversation")) },
+      },
+    },
+    "/api/messages/conversation/{conversationId}/shared": {
+      get: {
+        tags: ["Conversations"],
+        summary: "Shared media / files / links across a conversation's history",
+        security: auth,
+        parameters: [
+          { name: "conversationId", in: "path", required: true, schema: { type: "string" } },
+          { name: "type", in: "query", required: false, schema: { type: "string", enum: ["media", "files", "links"], default: "media" } },
+        ],
+        responses: { 200: ok("Matching messages (newest first)", arrayOf("Message")), 403: ok("Not a participant") },
       },
     },
     "/api/messages/conversation/{conversationId}": {

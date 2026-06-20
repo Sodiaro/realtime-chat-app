@@ -1,4 +1,5 @@
-import type { RequestHandler } from "express";
+import type { Request, Response, RequestHandler } from "express";
+import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { generateToken } from "../lib/utils.js";
 import { env } from "../lib/env.js";
@@ -6,7 +7,18 @@ import { sendOtpEmail } from "../lib/email.js";
 import User, { type IUser } from "../models/user.model.js";
 import Message from "../models/message.model.js";
 import Conversation from "../models/conversation.model.js";
+import Session from "../models/session.model.js";
 import cloudinary from "../lib/cloudinary.js";
+
+// create a device session for this login and issue a token bound to it
+async function startSession(req: Request, res: Response, user: IUser) {
+  const session = await Session.create({
+    userId: user._id,
+    userAgent: String(req.headers["user-agent"] || ""),
+    ip: req.ip || req.socket?.remoteAddress || "",
+  });
+  generateToken(user._id, res, user.tokenVersion, String(session._id));
+}
 
 const publicUser = (u: IUser) => ({
   _id: u._id,
@@ -56,7 +68,7 @@ export const signup: RequestHandler = async (req, res, next) => {
     if (env.NODE_ENV === "test") {
       newUser.isVerified = true;
       await newUser.save();
-      generateToken(newUser._id, res, newUser.tokenVersion);
+      await startSession(req, res, newUser);
       res.status(201).json(publicUser(newUser));
       return;
     }
@@ -91,7 +103,7 @@ export const verifyEmail: RequestHandler = async (req, res, next) => {
       return;
     }
     if (user.isVerified) {
-      generateToken(user._id, res, user.tokenVersion);
+      await startSession(req, res, user);
       res.status(200).json(publicUser(user));
       return;
     }
@@ -107,7 +119,7 @@ export const verifyEmail: RequestHandler = async (req, res, next) => {
     user.emailOtp = undefined;
     user.emailOtpExpires = undefined;
     await user.save();
-    generateToken(user._id, res, user.tokenVersion);
+    await startSession(req, res, user);
     res.status(200).json(publicUser(user));
   } catch (error) {
     next(error);
@@ -165,15 +177,25 @@ export const login: RequestHandler = async (req, res, next) => {
       return;
     }
 
-    generateToken(user._id, res, user.tokenVersion);
+    await startSession(req, res, user);
     res.status(200).json(publicUser(user));
   } catch (error) {
     next(error);
   }
 };
 
-export const logout: RequestHandler = (req, res, next) => {
+export const logout: RequestHandler = async (req, res, next) => {
   try {
+    // best-effort: drop this device's session so it disappears from the list
+    const token = req.cookies?.jwt;
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as { sid?: string };
+        if (decoded.sid) await Session.deleteOne({ _id: decoded.sid });
+      } catch {
+        /* invalid/expired token — nothing to clean up */
+      }
+    }
     res.cookie("jwt", "", { maxAge: 0 });
     res.status(200).json({ message: "Logged out successfully" });
   } catch (error) {
@@ -291,7 +313,9 @@ export const changePassword: RequestHandler = async (req, res, next) => {
     user.password = await bcrypt.hash(newPassword, salt);
     user.tokenVersion += 1; // sign out other sessions
     await user.save();
-    generateToken(user._id, res, user.tokenVersion); // keep this session valid
+    // drop every other device's session, keep the current one alive
+    await Session.deleteMany({ userId: user._id, _id: { $ne: req.sessionId ?? null } });
+    generateToken(user._id, res, user.tokenVersion, req.sessionId);
     res.status(200).json({ message: "Password changed" });
   } catch (error) {
     next(error);
@@ -307,8 +331,41 @@ export const logoutAllDevices: RequestHandler = async (req, res, next) => {
     }
     user.tokenVersion += 1;
     await user.save();
-    generateToken(user._id, res, user.tokenVersion); // re-issue for this device
+    await Session.deleteMany({ userId: user._id, _id: { $ne: req.sessionId ?? null } });
+    generateToken(user._id, res, user.tokenVersion, req.sessionId); // re-issue for this device
     res.status(200).json({ message: "Logged out of all other devices" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getSessions: RequestHandler = async (req, res, next) => {
+  try {
+    const sessions = await Session.find({ userId: req.user!._id })
+      .sort({ lastSeenAt: -1 })
+      .lean();
+    res.status(200).json(
+      sessions.map((s) => ({
+        _id: s._id,
+        userAgent: s.userAgent,
+        ip: s.ip,
+        createdAt: s.createdAt,
+        lastSeenAt: s.lastSeenAt,
+        current: String(s._id) === req.sessionId,
+      }))
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const revokeSession: RequestHandler = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    await Session.deleteOne({ _id: id, userId: req.user!._id });
+    // revoking the device you're on also clears its cookie
+    if (id === req.sessionId) res.cookie("jwt", "", { maxAge: 0 });
+    res.status(200).json({ revoked: true });
   } catch (error) {
     next(error);
   }
@@ -323,6 +380,7 @@ export const deleteAccount: RequestHandler = async (req, res, next) => {
       { isGroup: true, participants: myId },
       { $pull: { participants: myId, admins: myId } }
     );
+    await Session.deleteMany({ userId: myId });
     await User.findByIdAndDelete(myId);
     res.cookie("jwt", "", { maxAge: 0 });
     res.status(200).json({ message: "Account deleted" });

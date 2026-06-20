@@ -1,8 +1,33 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { THEMES } from "../constants";
 import { useThemeStore } from "../store/useThemeStore";
 import { useAuthStore } from "../store/useAuthStore";
-import { Send } from "lucide-react";
+import { Send, Monitor } from "lucide-react";
+
+// turn a raw user-agent string into a friendly "Browser · OS" label
+const deviceLabel = (ua = "") => {
+  const browser = /edg/i.test(ua)
+    ? "Edge"
+    : /chrome|crios/i.test(ua)
+      ? "Chrome"
+      : /firefox|fxios/i.test(ua)
+        ? "Firefox"
+        : /safari/i.test(ua)
+          ? "Safari"
+          : "Browser";
+  const os = /windows/i.test(ua)
+    ? "Windows"
+    : /android/i.test(ua)
+      ? "Android"
+      : /iphone|ipad|ios/i.test(ua)
+        ? "iOS"
+        : /mac/i.test(ua)
+          ? "macOS"
+          : /linux/i.test(ua)
+            ? "Linux"
+            : "Unknown OS";
+  return `${browser} · ${os}`;
+};
 
 const PREVIEW_MESSAGES = [
   { id: 1, content: "Hey! How's it going?", isSent: false },
@@ -11,10 +36,29 @@ const PREVIEW_MESSAGES = [
 
 const SettingsPage = () => {
   const { theme, setTheme } = useThemeStore();
-  const { authUser, changePassword, logoutAllDevices, deleteAccount, updatePrivacy } = useAuthStore();
+  const { authUser, changePassword, logoutAllDevices, deleteAccount, updatePrivacy, getSessions, revokeSession } =
+    useAuthStore();
 
   const [curPw, setCurPw] = useState("");
   const [newPw, setNewPw] = useState("");
+  const [sessions, setSessions] = useState([]);
+
+  useEffect(() => {
+    if (!authUser) return;
+    let active = true;
+    (async () => {
+      const data = await getSessions();
+      if (active) setSessions(data);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [authUser, getSessions]);
+
+  const onRevoke = async (id) => {
+    const ok = await revokeSession(id);
+    if (ok) setSessions((s) => s.filter((x) => x._id !== id));
+  };
 
   const onChangePassword = async () => {
     if (!curPw || !newPw) return;
@@ -70,6 +114,42 @@ const SettingsPage = () => {
                 Delete account
               </button>
             </div>
+          </div>
+        )}
+
+        {authUser && (
+          <div className="rounded-xl border border-base-300 p-5 space-y-3">
+            <div>
+              <h2 className="text-lg font-semibold">Devices</h2>
+              <p className="text-sm text-base-content/70">
+                Where you're logged in. Revoke any device you don't recognize.
+              </p>
+            </div>
+            {sessions.length === 0 ? (
+              <p className="text-sm opacity-60">No active device sessions.</p>
+            ) : (
+              <div className="space-y-2">
+                {sessions.map((s) => (
+                  <div key={s._id} className="flex items-center gap-3 rounded-lg bg-base-200/50 p-3">
+                    <Monitor className="size-5 opacity-70 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium flex items-center gap-2">
+                        {deviceLabel(s.userAgent)}
+                        {s.current && <span className="badge badge-primary badge-sm">This device</span>}
+                      </div>
+                      <div className="text-xs opacity-60 truncate">
+                        {s.ip || "unknown IP"} · active {new Date(s.lastSeenAt).toLocaleString()}
+                      </div>
+                    </div>
+                    {!s.current && (
+                      <button onClick={() => onRevoke(s._id)} className="btn btn-xs btn-outline btn-error shrink-0">
+                        Log out
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

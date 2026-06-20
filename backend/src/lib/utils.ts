@@ -5,11 +5,14 @@ import type { Types } from "mongoose";
 export const generateToken = (
   userId: Types.ObjectId | string,
   res: Response,
-  tokenVersion = 0
+  tokenVersion = 0,
+  sid?: string // device session id (so individual devices can be revoked)
 ) => {
-  const token = jwt.sign({ userId, tokenVersion }, process.env.JWT_SECRET as string, {
-    expiresIn: "7d",
-  });
+  const token = jwt.sign(
+    { userId, tokenVersion, ...(sid ? { sid } : {}) },
+    process.env.JWT_SECRET as string,
+    { expiresIn: "7d" }
+  );
 
   res.cookie("jwt", token, {
     maxAge: 7 * 24 * 60 * 60 * 1000, // MS

@@ -26,6 +26,19 @@ const ChatContainer = () => {
   const { authUser } = useAuthStore();
   const messageEndRef = useRef(null);
   const prevCountRef = useRef(0);
+  const pinIndexRef = useRef(0);
+
+  // scroll a message into view and flash a highlight ring
+  const jumpToMessage = (id) => {
+    const el = document.getElementById(`msg-${id}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("ring-2", "ring-primary", "ring-offset-2", "ring-offset-base-200", "rounded-xl");
+    setTimeout(
+      () => el.classList.remove("ring-2", "ring-primary", "ring-offset-2", "ring-offset-base-200", "rounded-xl"),
+      1600
+    );
+  };
 
   useEffect(() => {
     prevCountRef.current = 0; // reset so the first load scrolls to bottom
@@ -66,15 +79,33 @@ const ChatContainer = () => {
   const pinned = messages.filter((m) => m.pinnedAt && !m.deletedAt);
   const latestPinned = pinned[pinned.length - 1];
 
+  const pinPreview = (m) =>
+    m.text || (m.image ? "📷 Photo" : m.file ? "📎 File" : m.audio ? "🎤 Voice note" : m.poll ? "📊 Poll" : "Message");
+
+  // jump to the next pinned message each click (cycles through them)
+  const handlePinnedClick = () => {
+    if (pinned.length === 0) return;
+    const target = pinned[pinIndexRef.current % pinned.length];
+    pinIndexRef.current = (pinIndexRef.current + 1) % pinned.length;
+    jumpToMessage(target._id);
+  };
+
   return (
     <div className="flex-1 flex flex-col overflow-auto">
       <ChatHeader />
 
       {latestPinned && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 text-sm">
+        <button
+          onClick={handlePinnedClick}
+          className="w-full flex items-center gap-2 px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 text-sm text-left hover:bg-amber-500/20 transition-colors"
+          title="Jump to pinned message"
+        >
           <Pin className="size-4 text-amber-500 shrink-0" />
-          <span className="flex-1 truncate">{latestPinned.text || "📷 Photo"}</span>
-        </div>
+          <span className="flex-1 truncate">{pinPreview(latestPinned)}</span>
+          {pinned.length > 1 && (
+            <span className="text-xs opacity-60 shrink-0">{pinned.length} pinned</span>
+          )}
+        </button>
       )}
 
       <ForwardModal />
@@ -83,7 +114,7 @@ const ChatContainer = () => {
         {Object.values(
           messages.reduce((acc, m) => ({ ...acc, [m._id]: m }), {})
         ).map((message) => (
-          <div key={message._id} ref={messageEndRef}>
+          <div key={message._id} id={`msg-${message._id}`} ref={messageEndRef}>
             <MessageBubble
               message={message}
               isOwn={message.senderId === authUser._id}

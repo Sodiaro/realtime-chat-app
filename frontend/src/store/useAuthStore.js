@@ -154,6 +154,26 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
+  getSessions: async () => {
+    try {
+      const res = await axiosInstance.get("/auth/sessions");
+      return res.data;
+    } catch {
+      return [];
+    }
+  },
+
+  revokeSession: async (id) => {
+    try {
+      await axiosInstance.delete(`/auth/sessions/${id}`);
+      toast.success("Device logged out");
+      return true;
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to log out device");
+      return false;
+    }
+  },
+
   deleteAccount: async () => {
     try {
       await axiosInstance.delete("/auth/me");

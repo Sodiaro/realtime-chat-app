@@ -13,6 +13,8 @@ import {
   verifyEmail,
   resendOtp,
   updatePrivacy,
+  getSessions,
+  revokeSession,
 } from "../controllers/auth.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
 import { authLimiter } from "../middleware/rateLimit.js";
@@ -31,6 +33,8 @@ router.get("/check", protectRoute, checkAuth);
 router.post("/block/:id", protectRoute, blockUser);
 router.post("/change-password", protectRoute, changePassword);
 router.post("/logout-all", protectRoute, logoutAllDevices);
+router.get("/sessions", protectRoute, getSessions);
+router.delete("/sessions/:id", protectRoute, revokeSession);
 router.delete("/me", protectRoute, deleteAccount);
 
 export default router;

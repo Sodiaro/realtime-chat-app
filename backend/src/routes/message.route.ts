@@ -26,6 +26,7 @@ import {
   scheduleMessage,
   getScheduledMessages,
   cancelScheduledMessage,
+  getSharedMedia,
   renameGroup,
   addGroupMembers,
   removeGroupMember,
@@ -48,6 +49,7 @@ router.delete("/scheduled/:id", protectRoute, cancelScheduledMessage);
 // group / conversation routes (kept above the generic /:id)
 router.post("/group", protectRoute, createGroup);
 router.get("/conversation/:conversationId", protectRoute, getConversationMessages);
+router.get("/conversation/:conversationId/shared", protectRoute, getSharedMedia);
 router.post("/conversation/:conversationId", protectRoute, sendToConversation);
 router.patch("/conversation/:conversationId", protectRoute, renameGroup);
 router.post("/conversation/:conversationId/mute", protectRoute, toggleMute);

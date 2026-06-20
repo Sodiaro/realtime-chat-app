@@ -65,9 +65,7 @@ export async function getOnlineUserIds(): Promise<string[]> {
     allRooms?: () => Promise<Set<string>>; // Redis adapter only — cluster-wide
     rooms?: Map<string, Set<string>>; // in-memory adapter — local node
   };
-  // Use the Redis adapter's cluster-wide allRooms() when present; otherwise fall
-  // back to the in-memory adapter's local `rooms` Map (single-node deploys have
-  // no allRooms()
+
   const rooms =
     typeof adapter.allRooms === "function"
       ? await adapter.allRooms()
