@@ -35,7 +35,7 @@ export const useAuthStore = create((set, get) => ({
       const res = await axiosInstance.post("/auth/signup", data);
       if (res.data.needsVerification) {
         set({ pendingEmail: res.data.email });
-        if (res.data.devOtp) toast.success(`Dev code: ${res.data.devOtp}`, { duration: 8000 });
+        toast.success("We sent a verification code to your email");
         return;
       }
       set({ authUser: res.data, pendingEmail: null });
@@ -63,9 +63,8 @@ export const useAuthStore = create((set, get) => ({
 
   resendOtp: async (email) => {
     try {
-      const res = await axiosInstance.post("/auth/resend-otp", { email });
-      if (res.data.devOtp) toast.success(`Dev code: ${res.data.devOtp}`, { duration: 8000 });
-      else toast.success("Code sent");
+      await axiosInstance.post("/auth/resend-otp", { email });
+      toast.success("Code sent");
     } catch {
       toast.error("Failed to resend code");
     }
@@ -131,6 +130,28 @@ export const useAuthStore = create((set, get) => ({
       toast.success("Privacy updated");
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to update privacy");
+    }
+  },
+
+  forgotPassword: async (email) => {
+    try {
+      const res = await axiosInstance.post("/auth/forgot-password", { email });
+      toast.success("If that account exists, a reset code was sent");
+      return res.data; // may include devOtp outside production
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to send reset code");
+      return null;
+    }
+  },
+
+  resetPassword: async (email, otp, newPassword) => {
+    try {
+      await axiosInstance.post("/auth/reset-password", { email, otp, newPassword });
+      toast.success("Password reset — please log in");
+      return true;
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to reset password");
+      return false;
     }
   },
 

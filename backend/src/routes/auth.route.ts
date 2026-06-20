@@ -15,6 +15,8 @@ import {
   updatePrivacy,
   getSessions,
   revokeSession,
+  forgotPassword,
+  resetPassword,
 } from "../controllers/auth.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
 import { authLimiter } from "../middleware/rateLimit.js";
@@ -26,6 +28,8 @@ router.post("/signup", authLimiter, signup);
 router.post("/verify-email", authLimiter, verifyEmail);
 router.post("/resend-otp", authLimiter, resendOtp);
 router.post("/login", authLimiter, login);
+router.post("/forgot-password", authLimiter, forgotPassword);
+router.post("/reset-password", authLimiter, resetPassword);
 router.post("/logout", logout);
 router.put("/update-profile", protectRoute, updateProfile);
 router.post("/privacy", protectRoute, updatePrivacy);

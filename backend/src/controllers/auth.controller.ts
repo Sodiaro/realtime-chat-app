@@ -1,9 +1,10 @@
 import type { Request, Response, RequestHandler } from "express";
+import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { generateToken } from "../lib/utils.js";
 import { env } from "../lib/env.js";
-import { sendOtpEmail } from "../lib/email.js";
+import { sendOtpEmail, sendResetEmail } from "../lib/email.js";
 import User, { type IUser } from "../models/user.model.js";
 import Message from "../models/message.model.js";
 import Conversation from "../models/conversation.model.js";
@@ -32,7 +33,15 @@ const publicUser = (u: IUser) => ({
   privacy: u.privacy,
 });
 
-const genOtp = () => String(Math.floor(100000 + Math.random() * 900000));
+// cryptographically secure 6-digit code
+const genOtp = () => String(crypto.randomInt(100000, 1000000));
+
+// wrong codes are rate-limited; after this many, the code is invalidated
+const MAX_OTP_ATTEMPTS = 5;
+
+// surface the code in API responses ONLY under automated tests — never dev/prod.
+// in real use the code is delivered exclusively by email.
+const testCode = (otp: string) => (env.NODE_ENV === "test" ? { devOtp: otp } : {});
 
 export const signup: RequestHandler = async (req, res, next) => {
   const { fullName, email, password, username } = req.body;
@@ -83,7 +92,7 @@ export const signup: RequestHandler = async (req, res, next) => {
     res.status(201).json({
       needsVerification: true,
       email,
-      ...(env.NODE_ENV === "development" ? { devOtp: otp } : {}),
+      ...testCode(otp),
     });
   } catch (error) {
     next(error);
@@ -112,12 +121,24 @@ export const verifyEmail: RequestHandler = async (req, res, next) => {
       return;
     }
     if (!(await bcrypt.compare(String(otp), user.emailOtp))) {
+      // brute-force guard: invalidate the code after too many wrong tries
+      user.emailOtpAttempts = (user.emailOtpAttempts || 0) + 1;
+      if (user.emailOtpAttempts >= MAX_OTP_ATTEMPTS) {
+        user.emailOtp = undefined;
+        user.emailOtpExpires = undefined;
+        user.emailOtpAttempts = 0;
+        await user.save();
+        res.status(400).json({ message: "Too many attempts. Please request a new code." });
+        return;
+      }
+      await user.save();
       res.status(400).json({ message: "Invalid code" });
       return;
     }
     user.isVerified = true;
     user.emailOtp = undefined;
     user.emailOtpExpires = undefined;
+    user.emailOtpAttempts = 0;
     await user.save();
     await startSession(req, res, user);
     res.status(200).json(publicUser(user));
@@ -138,12 +159,93 @@ export const resendOtp: RequestHandler = async (req, res, next) => {
     const salt = await bcrypt.genSalt(10);
     user.emailOtp = await bcrypt.hash(otp, salt);
     user.emailOtpExpires = new Date(Date.now() + 10 * 60 * 1000);
+    user.emailOtpAttempts = 0; // fresh code, fresh attempt budget
     await user.save();
     await sendOtpEmail(email, otp);
-    res.status(200).json({
-      message: "Code sent",
-      ...(env.NODE_ENV === "development" ? { devOtp: otp } : {}),
+    res.status(200).json({ message: "Code sent", ...testCode(otp) });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// step 1 of reset: email a one-time code (generic response — never reveals if the email exists)
+export const forgotPassword: RequestHandler = async (req, res, next) => {
+  try {
+    const { email } = req.body; // "email" carries an email OR a username
+    if (!email) {
+      res.status(400).json({ message: "Email or username is required" });
+      return;
+    }
+    const generic = { message: "If that account exists, a reset code was sent" };
+    const identifier = String(email).trim();
+    const user = await User.findOne({
+      $or: [{ email: identifier }, { username: identifier.toLowerCase() }],
     });
+    if (!user) {
+      res.status(200).json(generic);
+      return;
+    }
+    const otp = genOtp();
+    const salt = await bcrypt.genSalt(10);
+    user.resetOtp = await bcrypt.hash(otp, salt);
+    user.resetOtpExpires = new Date(Date.now() + 15 * 60 * 1000);
+    user.resetOtpAttempts = 0; // fresh code, fresh attempt budget
+    await user.save();
+    await sendResetEmail(user.email, otp); // always delivered to the account's email
+
+    res.status(200).json({ ...generic, ...testCode(otp) });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// step 2 of reset: verify the code, set a new password, and sign out everywhere
+export const resetPassword: RequestHandler = async (req, res, next) => {
+  try {
+    const { email, otp, newPassword } = req.body; // "email" carries an email OR a username
+    if (!email || !otp || !newPassword) {
+      res.status(400).json({ message: "Email/username, code and new password are required" });
+      return;
+    }
+    if (String(newPassword).length < 6) {
+      res.status(400).json({ message: "Password must be at least 6 characters" });
+      return;
+    }
+    const identifier = String(email).trim();
+    const user = await User.findOne({
+      $or: [{ email: identifier }, { username: identifier.toLowerCase() }],
+    });
+    if (!user || !user.resetOtp || !user.resetOtpExpires || user.resetOtpExpires < new Date()) {
+      res.status(400).json({ message: "Invalid or expired code" });
+      return;
+    }
+    if (!(await bcrypt.compare(String(otp), user.resetOtp))) {
+      // brute-force guard: invalidate the code after too many wrong tries
+      user.resetOtpAttempts = (user.resetOtpAttempts || 0) + 1;
+      if (user.resetOtpAttempts >= MAX_OTP_ATTEMPTS) {
+        user.resetOtp = undefined;
+        user.resetOtpExpires = undefined;
+        user.resetOtpAttempts = 0;
+        await user.save();
+        res.status(400).json({ message: "Too many attempts. Please request a new code." });
+        return;
+      }
+      await user.save();
+      res.status(400).json({ message: "Invalid code" });
+      return;
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+    user.resetOtp = undefined;
+    user.resetOtpExpires = undefined;
+    user.resetOtpAttempts = 0;
+    user.isVerified = true; // completing the email code proves ownership
+    user.tokenVersion += 1; // invalidate every existing token
+    await user.save();
+    await Session.deleteMany({ userId: user._id }); // and every device session
+
+    res.status(200).json({ message: "Password reset. You can now log in." });
   } catch (error) {
     next(error);
   }

@@ -24,6 +24,10 @@ export interface IUser {
   isVerified: boolean;
   emailOtp?: string; // hashed OTP
   emailOtpExpires?: Date;
+  emailOtpAttempts: number; // failed verification attempts (brute-force guard)
+  resetOtp?: string; // hashed password-reset code
+  resetOtpExpires?: Date;
+  resetOtpAttempts: number;
   privacy: IPrivacy;
   createdAt: Date;
   updatedAt: Date;
@@ -83,6 +87,10 @@ const userSchema = new Schema<IUser>(
     },
     emailOtp: { type: String },
     emailOtpExpires: { type: Date },
+    emailOtpAttempts: { type: Number, default: 0 },
+    resetOtp: { type: String },
+    resetOtpExpires: { type: Date },
+    resetOtpAttempts: { type: Number, default: 0 },
     privacy: {
       lastSeen: { type: String, enum: ["everyone", "contacts", "nobody"], default: "everyone" },
       readReceipts: { type: Boolean, default: true },

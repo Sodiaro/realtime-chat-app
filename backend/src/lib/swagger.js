@@ -264,6 +264,36 @@ export const openapiSpec = {
         responses: { 200: ok("Logged in", ref("User")), 400: ok("Invalid credentials", ref("Error")), 429: ok("Rate limited") },
       },
     },
+    "/api/auth/forgot-password": {
+      post: {
+        tags: ["Auth"],
+        summary: "Request a password-reset code (by email or username; generic response)",
+        requestBody: {
+          required: true,
+          content: json({
+            type: "object",
+            required: ["email"],
+            properties: { email: { type: "string", description: "email OR username — code is sent to the account's email" } },
+          }),
+        },
+        responses: { 200: ok("Code sent if the account exists (delivered only by email)"), 429: ok("Rate limited") },
+      },
+    },
+    "/api/auth/reset-password": {
+      post: {
+        tags: ["Auth"],
+        summary: "Reset password with the emailed code (signs out all sessions)",
+        requestBody: {
+          required: true,
+          content: json({
+            type: "object",
+            required: ["email", "otp", "newPassword"],
+            properties: { email: { type: "string", description: "email OR username" }, otp: { type: "string" }, newPassword: { type: "string", minLength: 6 } },
+          }),
+        },
+        responses: { 200: ok("Password reset"), 400: ok("Invalid or expired code", ref("Error")), 429: ok("Rate limited") },
+      },
+    },
     "/api/auth/logout": {
       post: { tags: ["Auth"], summary: "Log out (clears cookie)", responses: { 200: ok("Logged out") } },
     },
