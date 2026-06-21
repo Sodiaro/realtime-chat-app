@@ -33,6 +33,9 @@ const GroupInfoModal = ({ conversation, onClose }) => {
   const [inviteCode, setInviteCode] = useState(null);
 
   const candidates = users.filter((u) => !memberIds.includes(u._id));
+  const MAX_GROUP_MEMBERS = 200;
+  const isFull = members.length >= MAX_GROUP_MEMBERS;
+  const remaining = MAX_GROUP_MEMBERS - members.length; // free slots for new members
   const isGroupAdmin = (id) => (conversation.admins || []).some((a) => (a?._id || a) === id);
   const inviteUrl = inviteCode ? `${window.location.origin}/join/${inviteCode}` : "";
 
@@ -182,9 +185,14 @@ const GroupInfoModal = ({ conversation, onClose }) => {
           {/* members */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <p className="text-sm opacity-60">{members.length} members</p>
+              <p className="text-sm opacity-60">{members.length} / {MAX_GROUP_MEMBERS} members</p>
               {isAdmin && (
-                <button onClick={() => setAdding((v) => !v)} className="btn btn-ghost btn-xs gap-1">
+                <button
+                  onClick={() => setAdding((v) => !v)}
+                  disabled={isFull}
+                  title={isFull ? "Group is full" : "Add members"}
+                  className="btn btn-ghost btn-xs gap-1"
+                >
                   <Plus className="size-4" /> Add
                 </button>
               )}
@@ -193,19 +201,32 @@ const GroupInfoModal = ({ conversation, onClose }) => {
             {adding && (
               <div className="mb-2 max-h-40 overflow-y-auto rounded-lg border border-base-300">
                 {candidates.length === 0 && <p className="p-2 text-sm opacity-60">No one to add</p>}
-                {candidates.map((u) => (
-                  <label key={u._id} className="flex items-center gap-2 p-2 cursor-pointer hover:bg-base-200">
-                    <input
-                      type="checkbox"
-                      className="checkbox checkbox-sm"
-                      checked={toAdd.includes(u._id)}
-                      onChange={() =>
-                        setToAdd((s) => (s.includes(u._id) ? s.filter((x) => x !== u._id) : [...s, u._id]))
-                      }
-                    />
-                    <span className="text-sm truncate">{u.fullName}</span>
-                  </label>
-                ))}
+                {toAdd.length >= remaining && (
+                  <p className="p-2 text-xs text-warning">Only {remaining} more {remaining === 1 ? "member" : "members"} can be added.</p>
+                )}
+                {candidates.map((u) => {
+                  const checked = toAdd.includes(u._id);
+                  const blocked = !checked && toAdd.length >= remaining;
+                  return (
+                    <label
+                      key={u._id}
+                      className={`flex items-center gap-2 p-2 hover:bg-base-200 ${
+                        blocked ? "opacity-40 cursor-not-allowed" : "cursor-pointer"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="checkbox checkbox-sm"
+                        checked={checked}
+                        disabled={blocked}
+                        onChange={() =>
+                          setToAdd((s) => (s.includes(u._id) ? s.filter((x) => x !== u._id) : [...s, u._id]))
+                        }
+                      />
+                      <span className="text-sm truncate">{u.fullName}</span>
+                    </label>
+                  );
+                })}
                 {candidates.length > 0 && (
                   <button onClick={doAdd} disabled={!toAdd.length} className="btn btn-primary btn-sm w-full">
                     Add ({toAdd.length})

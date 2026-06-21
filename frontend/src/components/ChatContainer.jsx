@@ -7,6 +7,7 @@ import ChatHeader from "./ChatHeader";
 import MessageInput from "./MessageInput";
 import MessageBubble from "./MessageBubble";
 import ForwardModal from "./ForwardModal";
+import ViewOnceViewer from "./ViewOnceViewer";
 import Avatar from "./Avatar";
 import MessageSkeleton from "./skeletons/MessageSkeleton";
 import { useAuthStore } from "../store/useAuthStore";
@@ -192,6 +193,7 @@ const ChatContainer = () => {
       )}
 
       <ForwardModal />
+      <ViewOnceViewer />
 
       <div ref={scrollRef} onScroll={onScroll} className={`flex-1 overflow-y-auto px-4 sm:px-6 lg:px-10 py-5 ${bgClass(bg)}`}>
         {isLoadingOlder && (

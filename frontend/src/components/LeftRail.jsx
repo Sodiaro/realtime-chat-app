@@ -99,6 +99,7 @@ const LeftRail = () => {
       <RailButton onClick={() => openPanel("starred")} icon={<Star className="size-5" />} label="Starred" active={panel === "starred"} />
 
       <div className="mt-auto flex flex-col items-center gap-2">
+        <RailLink to="/settings" icon={<Settings className="size-5" />} label="Settings" />
         <button
           onClick={toggle}
           title="Toggle theme"

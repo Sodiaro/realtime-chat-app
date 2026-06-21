@@ -1,7 +1,7 @@
 import { memo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useShallow } from "zustand/react/shallow";
-import { Check, CheckCheck, Clock, AlertCircle, Pencil, Trash2, X, Reply, Forward, Pin, Flag, Star, FileText, Download, MapPin, MessageSquare, MoreVertical, Copy, Video, PhoneOutgoing, PhoneIncoming, PhoneMissed, Timer } from "lucide-react";
+import { Check, CheckCheck, Clock, AlertCircle, Pencil, Trash2, X, Reply, Forward, Pin, Flag, Star, FileText, Download, MapPin, MessageSquare, MoreVertical, Copy, Video, PhoneOutgoing, PhoneIncoming, PhoneMissed, Timer, Eye, EyeOff } from "lucide-react";
 import toast from "react-hot-toast";
 import { useChatStore } from "../store/useChatStore";
 import { formatMessageTime } from "../lib/utils";
@@ -44,7 +44,7 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users, grouped 
   // select stable action refs only, so memo() isn't defeated by whole-store subscription
   const {
     editMessage, deleteMessage, reactToMessage, setReplyingTo, setForwarding,
-    pinMessage, reportMessage, starMessage, votePoll, setSelectedUser,
+    pinMessage, reportMessage, starMessage, votePoll, setSelectedUser, openViewOnce,
   } = useChatStore(
     useShallow((s) => ({
       editMessage: s.editMessage,
@@ -57,6 +57,7 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users, grouped 
       starMessage: s.starMessage,
       votePoll: s.votePoll,
       setSelectedUser: s.setSelectedUser,
+      openViewOnce: s.openViewOnce,
     }))
   );
   const [editing, setEditing] = useState(false);
@@ -69,6 +70,15 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users, grouped 
   const isDeleted = Boolean(message.deletedAt);
   const mentionsMe = (message.mentions || []).some((id) => id === authUser._id);
   const starredByMe = (message.starredBy || []).some((id) => id === authUser._id);
+
+  // view-once state — content is never inlined; it only opens in the secure viewer
+  const isViewOnce = Boolean(message.viewOnce);
+  const voConsumed = !isOwn && Boolean(message.viewOnceConsumed); // recipient already opened it
+  const voOpened = isOwn && (Boolean(message.viewOnceOpened) || (message.viewedBy || []).length > 0);
+  const voKind = message.viewOnceKind || (message.image ? "photo" : message.audio ? "voice" : message.file ? "file" : "text");
+  const voLabel = voKind === "photo" ? "Photo" : voKind === "voice" ? "Voice note" : voKind === "file" ? "File" : "Message";
+  // recipient can tap to open exactly once; sender / consumed are static
+  const voTappable = isViewOnce && !isOwn && !voConsumed;
   // edit/delete only within 10 minutes of sending
   const canModify = isOwn && Date.now() - new Date(message.createdAt).getTime() < 10 * 60 * 1000;
   const isGroup = selectedUser.isGroup;
@@ -245,6 +255,38 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users, grouped 
             <button onClick={submitEdit} className="text-xs underline">save</button>
             <button onClick={() => setEditing(false)}><X className="size-3.5" /></button>
           </div>
+        ) : isViewOnce ? (
+          <button
+            type="button"
+            onClick={voTappable ? () => openViewOnce(message._id) : undefined}
+            disabled={!voTappable}
+            className={`flex items-center gap-2.5 text-sm py-1 pr-1 rounded-lg ${
+              voTappable ? "cursor-pointer" : "cursor-default opacity-80"
+            }`}
+          >
+            <span
+              className={`size-9 rounded-full grid place-items-center shrink-0 ${
+                isOwn ? "bg-primary-content/20 text-primary-content" : "bg-primary/15 text-primary"
+              }`}
+            >
+              {voConsumed || voOpened ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            </span>
+            <span className="text-left leading-tight">
+              <span className="font-semibold flex items-center gap-1">
+                View once
+                <span className="text-[10px] font-medium uppercase tracking-wide opacity-60">· {voLabel}</span>
+              </span>
+              <span className="block text-xs opacity-70">
+                {voConsumed
+                  ? "Opened"
+                  : isOwn
+                    ? voOpened
+                      ? "Opened"
+                      : "Sent · disappears after viewing"
+                    : "Tap to view · disappears after"}
+              </span>
+            </span>
+          </button>
         ) : (
           <>
             {message.forwardedFrom && (

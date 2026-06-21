@@ -43,6 +43,7 @@ export const useChatStore = create((set, get) => ({
   isRecordingPeer: false, // the other user is recording a voice note
   replyingTo: null, // message being replied to
   forwarding: null, // message being forwarded (opens the picker)
+  viewOnceViewing: null, // { messageId, kind, ...content } currently open in the secure viewer
 
   getUsers: async () => {
     set({ isUsersLoading: true });
@@ -213,6 +214,7 @@ export const useChatStore = create((set, get) => ({
     socket.off("typing");
     socket.off("messagesRead");
     socket.off("messageUpdated");
+    socket.off("messageViewed");
 
     socket.on("recording", ({ from, isRecording }) => {
       if (from !== get().selectedUser?._id) return;
@@ -239,8 +241,22 @@ export const useChatStore = create((set, get) => ({
 
     // edits, deletes and reactions arrive as a full replacement of the message
     socket.on("messageUpdated", (updated) => {
+      // ghost-mode deletes vanish with no tombstone
+      if (updated.ghostDeleted) {
+        set({ messages: get().messages.filter((m) => m._id !== updated._id) });
+        return;
+      }
       set({
         messages: get().messages.map((m) => (m._id === updated._id ? updated : m)),
+      });
+    });
+
+    // a view-once message I sent was opened by the recipient
+    socket.on("messageViewed", ({ messageId }) => {
+      set({
+        messages: get().messages.map((m) =>
+          m._id === messageId ? { ...m, viewOnceOpened: true } : m
+        ),
       });
     });
   },
@@ -466,6 +482,27 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
+  // open a view-once message in the secure viewer. Fetching the content consumes
+  // it server-side immediately; the bubble flips to "Opened" right away.
+  openViewOnce: async (messageId) => {
+    const markConsumed = () =>
+      set({
+        messages: get().messages.map((m) =>
+          m._id === messageId ? { ...m, viewOnceConsumed: true } : m
+        ),
+      });
+    try {
+      const res = await axiosInstance.post(`/messages/${messageId}/view`);
+      const msg = get().messages.find((m) => m._id === messageId);
+      set({ viewOnceViewing: { messageId, kind: msg?.viewOnceKind, ...res.data } });
+      markConsumed();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "This message is no longer available");
+      if (error.response?.status === 410) markConsumed();
+    }
+  },
+  closeViewOnce: () => set({ viewOnceViewing: null }),
+
   // target is { to: userId } for a DM or { conversationId } for a group
   forwardMessage: async (messageId, target) => {
     try {
@@ -689,5 +726,6 @@ export const useChatStore = create((set, get) => ({
     socket.emit("markRead", { to: selectedUser._id });
   },
 
-  setSelectedUser: (selectedUser) => set({ selectedUser, isTyping: false, isRecordingPeer: false }),
+  setSelectedUser: (selectedUser) =>
+    set({ selectedUser, isTyping: false, isRecordingPeer: false, viewOnceViewing: null }),
 }));

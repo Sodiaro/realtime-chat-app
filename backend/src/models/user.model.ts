@@ -29,6 +29,7 @@ export interface IUser {
   resetOtpExpires?: Date;
   resetOtpAttempts: number;
   privacy: IPrivacy;
+  ghostMode: boolean; // suppresses read/edit/delete/last-seen/status-view activity (publicly flagged)
   createdAt: Date;
   updatedAt: Date;
 }
@@ -96,6 +97,7 @@ const userSchema = new Schema<IUser>(
       readReceipts: { type: Boolean, default: true },
       profilePhoto: { type: String, enum: ["everyone", "contacts", "nobody"], default: "everyone" },
     },
+    ghostMode: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

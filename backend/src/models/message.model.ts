@@ -82,6 +82,9 @@ export interface IMessage {
   reactions: IReaction[];
   starredBy: Types.ObjectId[];
   expiresAt?: Date; // disappearing messages
+  viewOnce?: boolean; // content can be opened only once per recipient
+  viewedBy: Types.ObjectId[]; // recipients who have consumed a view-once message
+  ghostDeleted?: boolean; // deleted by a ghost-mode user → hide silently (no tombstone)
   createdAt: Date;
   updatedAt: Date;
 }
@@ -192,6 +195,12 @@ const messageSchema = new Schema<IMessage>(
       default: [],
     },
     expiresAt: { type: Date },
+    viewOnce: { type: Boolean, default: false },
+    viewedBy: {
+      type: [{ type: Schema.Types.ObjectId, ref: "User" }],
+      default: [],
+    },
+    ghostDeleted: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

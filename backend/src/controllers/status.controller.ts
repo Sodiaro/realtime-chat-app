@@ -84,11 +84,14 @@ export const getStatuses: RequestHandler = async (req, res, next) => {
 export const viewStatus: RequestHandler = async (req, res, next) => {
   try {
     const me = req.user!._id;
-    // record a view once per viewer; don't count the owner viewing their own
-    await Status.updateOne(
-      { _id: req.params.id, userId: { $ne: me }, "views.user": { $ne: me } },
-      { $push: { views: { user: me, viewedAt: new Date() } } }
-    );
+    // ghost mode: view privately — never record the view
+    if (!req.user!.ghostMode) {
+      // record a view once per viewer; don't count the owner viewing their own
+      await Status.updateOne(
+        { _id: req.params.id, userId: { $ne: me }, "views.user": { $ne: me } },
+        { $push: { views: { user: me, viewedAt: new Date() } } }
+      );
+    }
     res.status(200).json({ ok: true });
   } catch (error) {
     next(error);

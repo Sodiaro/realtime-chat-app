@@ -21,6 +21,7 @@ interface ServerToClientEvents {
   messagesDelivered: (payload: { by: string; conversationId: string }) => void;
   groupMessagesRead: (payload: { conversationId: string; userId: string }) => void;
   messageUpdated: (message: IMessage) => void;
+  messageViewed: (payload: { messageId: string; by: string }) => void;
   conversationCreated: (conversation: IConversation) => void;
   conversationUpdated: (conversation: IConversation) => void;
   "call:incoming": (p: { from: string; fromName?: string; fromPic?: string; offer: unknown; video: boolean }) => void;
@@ -112,12 +113,12 @@ io.on("connection", async (socket) => {
   // receiver opened/viewed the chat → stamp readAt (+ delivered) and tell the sender
   socket.on("markRead", async ({ to }) => {
     if (typeof to !== "string") return;
-    const me = await User.findById(userId).select("privacy").lean();
+    const me = await User.findById(userId).select("privacy ghostMode").lean();
     const conv = await getOrCreateDirect(userId, to);
     const now = new Date();
 
-    // read receipts disabled: clear my unread + mark delivered, but never reveal "seen"
-    if (me?.privacy?.readReceipts === false) {
+    // read receipts disabled (or ghost mode): clear unread + mark delivered, never reveal "seen"
+    if (me?.privacy?.readReceipts === false || me?.ghostMode) {
       await Message.updateMany(
         { conversationId: conv._id, receiverId: userId, deliveredAt: { $exists: false } },
         { $set: { deliveredAt: now } }

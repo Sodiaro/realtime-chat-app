@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Search, Ban, MoreVertical, BellOff, Bell, Archive, Info, UserRound, Timer, Phone, Video, Pin, ArrowLeft } from "lucide-react";
+import { X, Search, Ban, MoreVertical, BellOff, Bell, Archive, Info, UserRound, Timer, Phone, Video, Pin, ArrowLeft, Ghost } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 import { useCallStore } from "../store/useCallStore";
@@ -85,6 +85,14 @@ const ChatHeader = () => {
               <h3 className="text-lg font-semibold leading-tight truncate">{selectedUser.fullName}</h3>
               {conv?.disappearMinutes > 0 && (
                 <Timer className="size-4 text-primary shrink-0" title="Disappearing messages are on" />
+              )}
+              {!isGroup && !isSelf && selectedUser.ghostMode && (
+                <span
+                  className="badge badge-sm gap-1 shrink-0 border-base-300"
+                  title="This person has Ghost Mode on — read receipts, last seen, status views and edit/delete indicators may be hidden"
+                >
+                  <Ghost className="size-3" /> Ghost
+                </span>
               )}
             </div>
             <p className={`text-sm ${isOnline && !isGroup && !isSelf ? "text-success" : "text-base-content/60"}`}>

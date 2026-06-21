@@ -73,6 +73,19 @@ const Navbar = () => {
             </nav>
           )}
 
+          {authUser && (
+            <Link
+              to="/settings"
+              aria-label="Settings"
+              title="Settings"
+              className={`btn btn-ghost btn-sm btn-circle ${
+                pathname === "/settings" ? "text-primary bg-primary/10" : "text-base-content/60 hover:text-base-content"
+              }`}
+            >
+              <Settings className="size-[18px]" />
+            </Link>
+          )}
+
           <button
             onClick={toggle}
             aria-label="Toggle theme"

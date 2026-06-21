@@ -111,6 +111,33 @@ const notExpired = () => ({
 const computeExpiry = (minutes?: number) =>
   minutes && minutes > 0 ? new Date(Date.now() + minutes * 60_000) : undefined;
 
+export const MAX_GROUP_MEMBERS = 200;
+
+// view-once: hide content from recipients until they open it, and forever after.
+// the sender always sees their own; recipients get a content-less placeholder
+// (with a type hint) until/after viewing.
+function redactViewOnce(msg: Record<string, unknown>, myId: string): Record<string, unknown> {
+  if (!msg.viewOnce) return msg;
+  const isSender = String(msg.senderId) === myId;
+  const viewedBy = (msg.viewedBy as unknown[]) || [];
+  const viewed = viewedBy.some((v) => String(v) === myId);
+  const kind = msg.image ? "photo" : msg.audio ? "voice" : msg.file ? "file" : "text";
+  // content NEVER ships in the list — not even to the sender. Only the one-time
+  // /view endpoint serves it, once, to a recipient who hasn't opened it yet.
+  return {
+    ...msg,
+    text: undefined,
+    image: undefined,
+    audio: undefined,
+    file: undefined,
+    location: undefined,
+    contact: undefined,
+    viewOnceKind: kind,
+    viewOnceConsumed: isSender ? undefined : viewed,
+    viewOnceOpened: isSender ? viewedBy.length > 0 : undefined, // sender sees "opened" status
+  };
+}
+
 // hide a user's last-seen / profile photo based on their privacy settings.
 // `isContact` is true when the viewer shares a DM with them.
 type Vis = "everyone" | "contacts" | "nobody";
@@ -118,13 +145,15 @@ interface PrivacyView {
   profilePic?: string;
   lastSeen?: unknown;
   privacy?: { lastSeen?: Vis; profilePhoto?: Vis };
+  ghostMode?: boolean;
 }
 const visibleTo = (setting: Vis | undefined, isContact: boolean) =>
   !setting || setting === "everyone" || (setting === "contacts" && isContact);
 
 function applyPrivacy<T extends PrivacyView>(u: T, isContact: boolean): T {
   const out: T = { ...u };
-  if (!visibleTo(out.privacy?.lastSeen, isContact)) delete (out as PrivacyView).lastSeen;
+  // ghost mode always hides last-seen (and ghostMode itself stays visible as a badge)
+  if (out.ghostMode || !visibleTo(out.privacy?.lastSeen, isContact)) delete (out as PrivacyView).lastSeen;
   if (!visibleTo(out.privacy?.profilePhoto, isContact)) (out as PrivacyView).profilePic = "";
   delete (out as PrivacyView).privacy;
   return out;
@@ -135,7 +164,7 @@ export const getUsersForSidebar: RequestHandler = async (req, res, next) => {
   try {
     const myId = String(req.user!._id);
     const convs = await Conversation.find({ isGroup: false, participants: myId })
-      .populate("participants", "fullName username profilePic bio status lastSeen privacy")
+      .populate("participants", "fullName username profilePic bio status lastSeen privacy ghostMode")
       .lean();
 
     const seen = new Set<string>();
@@ -171,7 +200,7 @@ export const searchUsers: RequestHandler = async (req, res, next) => {
         { fullName: { $regex: q, $options: "i" } },
       ],
     })
-      .select("fullName username profilePic bio status lastSeen privacy")
+      .select("fullName username profilePic bio status lastSeen privacy ghostMode")
       .limit(20)
       .lean();
     // search reaches strangers, so only "everyone" visibility is exposed here
@@ -237,8 +266,11 @@ export const getMessages: RequestHandler = async (req, res, next) => {
       .populate("replyTo", "text senderId image deletedAt")
       .lean();
 
-    const messages = page.reverse();
-    const nextCursor = page.length === limit ? messages[0]?.createdAt : null;
+    const ordered = page.reverse();
+    const nextCursor = page.length === limit ? ordered[0]?.createdAt : null;
+    const messages = ordered
+      .filter((m) => !m.ghostDeleted)
+      .map((m) => redactViewOnce(m as unknown as Record<string, unknown>, String(myId)));
 
     // opening a chat clears my unread for it
     await Conversation.updateOne(
@@ -284,7 +316,7 @@ async function resolveMentions(
 
 export const sendMessage: RequestHandler = async (req, res, next) => {
   try {
-    const { text, image, audio, file, poll, location, contact, replyTo } = req.body;
+    const { text, image, audio, file, poll, location, contact, replyTo, viewOnce } = req.body;
     const { id: receiverId } = req.params;
     const senderId = req.user!._id;
 
@@ -345,13 +377,14 @@ export const sendMessage: RequestHandler = async (req, res, next) => {
       mentions: await resolveMentions(text, conversation.participants),
       deliveredAt,
       expiresAt: computeExpiry(conversation.disappearMinutes),
+      viewOnce: Boolean(viewOnce),
       replyTo: replyTo || undefined,
     });
 
     await newMessage.save();
     await newMessage.populate("replyTo", "text senderId image deletedAt");
     messagesSentTotal.inc();
-    applyLinkPreview(newMessage); // fire-and-forget unfurl
+    if (!viewOnce) applyLinkPreview(newMessage); // fire-and-forget unfurl (skip for view-once)
 
     // bump conversation metadata + the receiver's unread count
     const convUpdate: Record<string, unknown> = {
@@ -429,7 +462,8 @@ export const updateMessage: RequestHandler = async (req, res, next) => {
     }
 
     message.text = String(text).trim();
-    message.editedAt = new Date();
+    // ghost mode: edit silently — leave no "edited" indicator
+    if (!req.user!.ghostMode) message.editedAt = new Date();
     await message.save();
 
     await emitMessageUpdate(message);
@@ -463,6 +497,8 @@ export const deleteMessage: RequestHandler = async (req, res, next) => {
     message.text = undefined;
     message.image = undefined;
     message.reactions = [];
+    // ghost mode: remove silently — clients hide it entirely (no "deleted" tombstone)
+    if (req.user!.ghostMode) message.ghostDeleted = true;
     await message.save();
 
     await emitMessageUpdate(message);
@@ -754,6 +790,47 @@ export const reportMessage: RequestHandler = async (req, res, next) => {
   }
 };
 
+// open a view-once message: returns its content once, then marks it consumed
+export const viewMessage: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const { messageId } = req.params;
+    const message = await Message.findById(messageId);
+    if (!message) return void res.status(404).json({ message: "Message not found" });
+    if (!message.viewOnce) return void res.status(400).json({ message: "Not a view-once message" });
+
+    const conv = await Conversation.findById(message.conversationId).select("participants").lean();
+    if (!conv || !conv.participants.map(String).includes(myId))
+      return void res.status(403).json({ message: "Not a participant" });
+
+    // the sender can never reopen their own view-once content
+    if (String(message.senderId) === myId)
+      return void res.status(403).json({ message: "You can't open your own view-once message" });
+    // a recipient gets exactly one view
+    if (message.viewedBy.some((v) => String(v) === myId))
+      return void res.status(410).json({ message: "This message has already been viewed" });
+
+    message.viewedBy.push(req.user!._id);
+    await message.save();
+    // let the sender's bubble flip to "Opened"
+    io.to(userRoom(String(message.senderId))).emit("messageViewed", {
+      messageId: String(message._id),
+      by: myId,
+    });
+
+    res.status(200).json({
+      text: message.text,
+      image: message.image,
+      audio: message.audio,
+      file: message.file,
+      location: message.location,
+      contact: message.contact,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // group chats
 
 export const createGroup: RequestHandler = async (req, res, next) => {
@@ -771,6 +848,10 @@ export const createGroup: RequestHandler = async (req, res, next) => {
     }
 
     const participants = Array.from(new Set([String(myId), ...members.map(String)]));
+    if (participants.length > MAX_GROUP_MEMBERS) {
+      res.status(400).json({ message: `Groups can have at most ${MAX_GROUP_MEMBERS} members` });
+      return;
+    }
     const conversation = new Conversation({
       key: `group:${new mongoose.Types.ObjectId().toString()}`,
       participants,
@@ -832,8 +913,11 @@ export const getConversationMessages: RequestHandler = async (req, res, next) =>
       .populate("replyTo", "text senderId image deletedAt")
       .lean();
 
-    const messages = page.reverse();
-    const nextCursor = page.length === limit ? messages[0]?.createdAt : null;
+    const ordered = page.reverse();
+    const nextCursor = page.length === limit ? ordered[0]?.createdAt : null;
+    const messages = ordered
+      .filter((m) => !m.ghostDeleted)
+      .map((m) => redactViewOnce(m as unknown as Record<string, unknown>, String(myId)));
 
     await Conversation.updateOne(
       { _id: conversation._id },
@@ -850,7 +934,7 @@ export const sendToConversation: RequestHandler = async (req, res, next) => {
   try {
     const senderId = req.user!._id;
     const { conversationId } = req.params;
-    const { text, image, audio, file, poll, location, contact, replyTo } = req.body;
+    const { text, image, audio, file, poll, location, contact, replyTo, viewOnce } = req.body;
 
     const pollDoc = buildPoll(poll);
     const locationDoc = buildLocation(location);
@@ -901,12 +985,13 @@ export const sendToConversation: RequestHandler = async (req, res, next) => {
       contact: contactDoc,
       mentions: await resolveMentions(text, conversation.participants),
       expiresAt: computeExpiry(conversation.disappearMinutes),
+      viewOnce: Boolean(viewOnce),
       replyTo: replyTo || undefined,
     });
     await newMessage.save();
     await newMessage.populate("replyTo", "text senderId image deletedAt");
     messagesSentTotal.inc();
-    applyLinkPreview(newMessage); // fire-and-forget unfurl
+    if (!viewOnce) applyLinkPreview(newMessage); // fire-and-forget unfurl (skip for view-once)
 
     const unreadInc: Record<string, number> = {};
     for (const p of participants) if (p !== String(senderId)) unreadInc[`unread.${p}`] = 1;
@@ -1302,6 +1387,8 @@ export const joinByInvite: RequestHandler = async (req, res, next) => {
 
     const already = conv.participants.map(String).includes(String(myId));
     if (!already) {
+      if (conv.participants.length >= MAX_GROUP_MEMBERS)
+        return void res.status(403).json({ message: "This group is full" });
       conv.participants.push(myId);
       await conv.save();
     }
@@ -1336,10 +1423,13 @@ export const addGroupMembers: RequestHandler = async (req, res, next) => {
     const added: string[] = [];
     for (const m of members) {
       if (!existing.includes(String(m))) {
+        if (conv.participants.length >= MAX_GROUP_MEMBERS) break; // honour the cap
         conv.participants.push(m as unknown as Types.ObjectId);
         added.push(String(m));
       }
     }
+    if (added.length === 0)
+      return void res.status(400).json({ message: `Group is full (max ${MAX_GROUP_MEMBERS} members)` });
     await conv.save();
 
     const populated = await Conversation.findById(conv._id).populate("participants", "-password");

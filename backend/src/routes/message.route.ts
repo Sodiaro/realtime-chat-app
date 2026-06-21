@@ -13,6 +13,7 @@ import {
   pinMessage,
   forwardMessage,
   reportMessage,
+  viewMessage,
   createGroup,
   getConversationMessages,
   sendToConversation,
@@ -81,6 +82,7 @@ router.post("/:messageId/forward", protectRoute, forwardMessage);
 router.post("/:messageId/report", protectRoute, reportMessage);
 router.post("/:messageId/star", protectRoute, starMessage);
 router.post("/:messageId/vote", protectRoute, votePoll);
+router.post("/:messageId/view", protectRoute, viewMessage);
 router.patch("/:messageId", protectRoute, updateMessage);
 router.delete("/:messageId", protectRoute, deleteMessage);
 

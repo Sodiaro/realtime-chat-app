@@ -356,7 +356,7 @@ export const updateProfile: RequestHandler = async (req, res, next) => {
 export const updatePrivacy: RequestHandler = async (req, res, next) => {
   try {
     const myId = req.user!._id;
-    const { lastSeen, readReceipts, profilePhoto } = req.body;
+    const { lastSeen, readReceipts, profilePhoto, ghostMode } = req.body;
     const options = ["everyone", "contacts", "nobody"];
     const set: Record<string, unknown> = {};
 
@@ -369,6 +369,7 @@ export const updatePrivacy: RequestHandler = async (req, res, next) => {
       set["privacy.profilePhoto"] = profilePhoto;
     }
     if (readReceipts !== undefined) set["privacy.readReceipts"] = Boolean(readReceipts);
+    if (ghostMode !== undefined) set["ghostMode"] = Boolean(ghostMode);
 
     if (Object.keys(set).length === 0) {
       return void res.status(400).json({ message: "Nothing to update" });

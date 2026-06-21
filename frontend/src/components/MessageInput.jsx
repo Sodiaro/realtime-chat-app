@@ -3,7 +3,7 @@ import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
 import { useDraftStore } from "../store/useDraftStore";
 import { usePrefsStore } from "../store/usePrefsStore";
-import { Image, Send, X, Reply, Mic, Pause, Play, Trash2, Paperclip, BarChart3, FileText, Clock, Plus, MapPin, UserRound } from "lucide-react";
+import { Image, Send, X, Reply, Mic, Pause, Play, Trash2, Paperclip, BarChart3, FileText, Clock, Plus, MapPin, UserRound, Eye } from "lucide-react";
 import toast from "react-hot-toast";
 import PollModal from "./PollModal";
 import ScheduleModal from "./ScheduleModal";
@@ -21,6 +21,8 @@ const MessageInput = () => {
   const [recording, setRecording] = useState(false);
   const [paused, setPaused] = useState(false);
   const [seconds, setSeconds] = useState(0);
+  const [viewOnce, setViewOnce] = useState(false);
+  const viewOnceRef = useRef(false); // latest value for the async voice-note send
   const fileInputRef = useRef(null);
   const docInputRef = useRef(null);
   const textareaRef = useRef(null);
@@ -35,6 +37,12 @@ const MessageInput = () => {
   const { getDraft, setDraft, clearDraft } = useDraftStore();
   const { enterToSend } = usePrefsStore();
   const chatId = selectedUser?._id;
+
+  // set view-once (kept in a ref too for the async voice-note send)
+  const setVO = (v) => {
+    setViewOnce(v);
+    viewOnceRef.current = v;
+  };
 
   // grow the textarea with its content, capped at ~6 lines
   const autoGrow = (el) => {
@@ -82,7 +90,11 @@ const MessageInput = () => {
         if (!canceledRef.current && chunksRef.current.length) {
           const blob = new Blob(chunksRef.current, { type: "audio/webm" });
           const reader = new FileReader();
-          reader.onloadend = () => sendMessage({ audio: reader.result, replyTo: replyingTo?._id });
+          reader.onloadend = () => {
+            sendMessage({ audio: reader.result, replyTo: replyingTo?._id, viewOnce: viewOnceRef.current });
+            setViewOnce(false);
+            viewOnceRef.current = false;
+          };
           reader.readAsDataURL(blob);
         }
         setSeconds(0);
@@ -181,11 +193,13 @@ const MessageInput = () => {
         image: imagePreview,
         file: filePreview,
         replyTo: replyingTo?._id,
+        viewOnce,
       });
       setText("");
       clearDraft(chatId);
       setImagePreview(null);
       setFilePreview(null);
+      setVO(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
       if (docInputRef.current) docInputRef.current.value = "";
     } catch (error) {
@@ -311,12 +325,31 @@ const MessageInput = () => {
         </div>
       )}
 
+      {viewOnce && (
+        <div className="mb-2 flex items-center gap-2 rounded-lg bg-primary/10 text-primary px-3 py-2 text-xs">
+          <Eye className="size-3.5 shrink-0" />
+          <span className="flex-1">View once — disappears after it's opened.</span>
+          <button type="button" onClick={() => setVO(false)}>
+            <X className="size-3.5" />
+          </button>
+        </div>
+      )}
+
       {recording ? (
         <div className="flex items-center gap-2 rounded-lg bg-base-200 px-3 py-2">
           <span className={`size-2.5 rounded-full bg-red-500 ${paused ? "" : "animate-pulse"}`} />
           <span className="text-sm tabular-nums">{fmt(seconds)}</span>
           <span className="text-sm opacity-60">{paused ? "Paused" : "Recording…"}</span>
           <div className="flex-1" />
+          <button
+            type="button"
+            onClick={() => setVO(!viewOnce)}
+            aria-pressed={viewOnce}
+            className={`btn btn-ghost btn-sm btn-circle ${viewOnce ? "text-primary bg-primary/15" : ""}`}
+            title={viewOnce ? "View once: on" : "Send as view once"}
+          >
+            <Eye className="size-4" />
+          </button>
           <button type="button" onClick={cancelRecording} className="btn btn-ghost btn-sm btn-circle" title="Cancel">
             <Trash2 className="size-4" />
           </button>
@@ -390,6 +423,16 @@ const MessageInput = () => {
                 </li>
               </ul>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setVO(!viewOnce)}
+              aria-pressed={viewOnce}
+              className={`btn btn-ghost btn-sm btn-circle ${viewOnce ? "text-primary bg-primary/15" : "text-base-content/50"}`}
+              title={viewOnce ? "View once: on" : "Send as view once"}
+            >
+              <Eye size={20} />
+            </button>
 
             <button
               type="button"

@@ -53,6 +53,7 @@ export const openapiSpec = {
               profilePhoto: { type: "string", enum: ["everyone", "contacts", "nobody"] },
             },
           },
+          ghostMode: { type: "boolean", description: "hides read/edit/delete/last-seen/status-view activity (publicly flagged)" },
           createdAt: { type: "string", format: "date-time" },
         },
       },
@@ -124,6 +125,8 @@ export const openapiSpec = {
           reactions: arrayOf("Reaction"),
           starredBy: { type: "array", items: ID },
           expiresAt: { type: "string", format: "date-time", nullable: true, description: "disappearing messages" },
+          viewOnce: { type: "boolean", description: "content can be opened only once per recipient" },
+          viewedBy: { type: "array", items: ID, description: "recipients who consumed a view-once message" },
           deliveredAt: { type: "string", format: "date-time", nullable: true },
           readAt: { type: "string", format: "date-time", nullable: true },
           readBy: { type: "array", items: ID, description: "group read receipts" },
@@ -365,7 +368,7 @@ export const openapiSpec = {
     "/api/auth/privacy": {
       post: {
         tags: ["Account"],
-        summary: "Update privacy settings (last seen / read receipts / profile photo)",
+        summary: "Update privacy settings (last seen / read receipts / profile photo / ghost mode)",
         security: auth,
         requestBody: {
           required: true,
@@ -375,6 +378,7 @@ export const openapiSpec = {
               lastSeen: { type: "string", enum: ["everyone", "contacts", "nobody"] },
               readReceipts: { type: "boolean" },
               profilePhoto: { type: "string", enum: ["everyone", "contacts", "nobody"] },
+              ghostMode: { type: "boolean" },
             },
           }),
         },
@@ -523,6 +527,7 @@ export const openapiSpec = {
               location: { type: "object", properties: { lat: { type: "number" }, lng: { type: "number" }, label: { type: "string" } } },
               contact: { type: "object", properties: { userId: { type: "string" }, name: { type: "string" }, username: { type: "string" }, avatar: { type: "string" } } },
               replyTo: { type: "string", description: "message id being replied to" },
+              viewOnce: { type: "boolean", description: "content can be opened only once" },
             },
           }),
         },
@@ -576,6 +581,26 @@ export const openapiSpec = {
         security: auth,
         parameters: [{ name: "messageId", in: "path", required: true, schema: { type: "string" } }],
         responses: { 200: ok("Star state", { type: "object", properties: { starred: { type: "boolean" } } }) },
+      },
+    },
+    "/api/messages/{messageId}/view": {
+      post: {
+        tags: ["Messages"],
+        summary: "Open a view-once message — returns its content once, then marks it consumed",
+        security: auth,
+        parameters: [{ name: "messageId", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          200: ok("Content", {
+            type: "object",
+            properties: {
+              text: { type: "string", nullable: true },
+              image: { type: "string", nullable: true },
+              audio: { type: "string", nullable: true },
+              file: { type: "object", nullable: true },
+            },
+          }),
+          410: ok("Already viewed", ref("Error")),
+        },
       },
     },
     "/api/messages/{messageId}/forward": {
@@ -663,6 +688,7 @@ export const openapiSpec = {
               image: { type: "string" },
               audio: { type: "string" },
               replyTo: { type: "string" },
+              viewOnce: { type: "boolean" },
             },
           }),
         },

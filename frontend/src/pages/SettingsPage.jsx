@@ -7,7 +7,7 @@ import { useChatStore } from "../store/useChatStore";
 import Avatar from "../components/Avatar";
 import {
   Monitor, Sun, Moon, User, Shield, Bell, MessageSquare, Palette, Timer,
-  Ban, Archive, HardDrive, Lock, Camera,
+  Ban, Archive, HardDrive, Lock, Camera, Ghost,
 } from "lucide-react";
 
 // turn a raw user-agent string into a friendly "Browser · OS" label
@@ -225,6 +225,19 @@ const SettingsPage = () => {
               title="Read receipts"
               desc="When off, others won't see when you've read their messages."
             />
+            <div className="rounded-lg border border-base-300 p-3 space-y-2">
+              <Toggle
+                checked={!!authUser.ghostMode}
+                onChange={(e) => updatePrivacy({ ghostMode: e.target.checked })}
+                title="Ghost mode"
+                desc="Hides your read activity, last seen, status views, and edit/delete indicators."
+              />
+              <p className="text-xs text-base-content/60 pl-9">
+                You stay findable and people can still message you — but they'll see a{" "}
+                <span className="inline-flex items-center gap-0.5 font-medium"><Ghost className="size-3" />Ghost</span>{" "}
+                badge so it's clear some activity is hidden.
+              </p>
+            </div>
           </Card>
 
           {/* NOTIFICATIONS */}
