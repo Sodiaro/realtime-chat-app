@@ -13,6 +13,7 @@ export interface ICommunity {
   admins: Types.ObjectId[];
   members: Types.ObjectId[];
   announcementId: Types.ObjectId; // the announcement channel conversation
+  nameKey?: string; // lowercased name for case-insensitive uniqueness
   createdAt: Date;
   updatedAt: Date;
 }
@@ -25,11 +26,14 @@ const communitySchema = new Schema<ICommunity>(
     admins: [{ type: Schema.Types.ObjectId, ref: "User" }],
     members: [{ type: Schema.Types.ObjectId, ref: "User" }],
     announcementId: { type: Schema.Types.ObjectId, ref: "Conversation", required: true },
+    nameKey: { type: String },
   },
   { timestamps: true }
 );
 
 communitySchema.index({ members: 1, updatedAt: -1 });
+// case-insensitive unique community names (sparse → legacy docs skipped)
+communitySchema.index({ nameKey: 1 }, { unique: true, sparse: true });
 
 const Community = mongoose.model<ICommunity>("Community", communitySchema);
 export default Community;

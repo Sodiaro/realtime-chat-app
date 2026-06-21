@@ -42,6 +42,7 @@ export const createCommunity: RequestHandler = async (req, res, next) => {
 
     const community = await new Community({
       name: cleanName,
+      nameKey: cleanName.toLowerCase(),
       description: description ? String(description).trim() : undefined,
       admins: [myId],
       members: [myId],
@@ -150,6 +151,7 @@ export const createCommunityGroup: RequestHandler = async (req, res, next) => {
       participants,
       isGroup: true,
       name: cleanName,
+      nameKey: `c:${community._id}:${cleanName.toLowerCase()}`,
       admins: [myId],
       communityId: community._id,
     }).save();

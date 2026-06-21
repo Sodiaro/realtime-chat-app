@@ -20,6 +20,9 @@ export interface IConversation {
   disappearMinutes?: number; // 0/undefined = off
   communityId?: Types.ObjectId; // group belongs to a community
   isAnnouncement?: boolean; // the community's announcement channel
+  // scoped, lowercased uniqueness key for groups: "g:<name>" (standalone) or
+  // "c:<communityId>:<name>" (community group). Absent for DMs/announcements.
+  nameKey?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -44,11 +47,15 @@ const conversationSchema = new Schema<IConversation>(
     disappearMinutes: { type: Number },
     communityId: { type: Schema.Types.ObjectId, ref: "Community", index: true },
     isAnnouncement: { type: Boolean, default: false },
+    nameKey: { type: String },
   },
   { timestamps: true }
 );
 
 conversationSchema.index({ participants: 1, lastMessageAt: -1 });
+// hard guarantee against duplicate group names (race-proof backstop). Sparse so
+// only groups that set nameKey participate — DMs, announcements & legacy docs are skipped.
+conversationSchema.index({ nameKey: 1 }, { unique: true, sparse: true });
 
 const Conversation = mongoose.model<IConversation>("Conversation", conversationSchema);
 

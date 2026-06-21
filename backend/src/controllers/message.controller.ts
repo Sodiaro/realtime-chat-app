@@ -879,6 +879,7 @@ export const createGroup: RequestHandler = async (req, res, next) => {
       participants,
       isGroup: true,
       name: cleanName,
+      nameKey: `g:${cleanName.toLowerCase()}`,
       admins: [myId],
     });
     await conversation.save();
@@ -1306,6 +1307,11 @@ export const renameGroup: RequestHandler = async (req, res, next) => {
         });
       }
       conv.name = cleanName;
+      if (!conv.isAnnouncement) {
+        conv.nameKey = conv.communityId
+          ? `c:${conv.communityId}:${cleanName.toLowerCase()}`
+          : `g:${cleanName.toLowerCase()}`;
+      }
     }
     if (description !== undefined) conv.description = String(description).slice(0, 500);
     if (onlyAdminsCanMessage !== undefined) conv.onlyAdminsCanMessage = Boolean(onlyAdminsCanMessage);

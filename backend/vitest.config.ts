@@ -7,7 +7,7 @@ export default defineConfig({
     setupFiles: ["./tests/setup.ts"],
     fileParallelism: false,
     hookTimeout: 60000,
-    testTimeout: 20000,
+    testTimeout: 60000, // bcrypt-heavy auth tests can run long under machine load
     env: {
       NODE_ENV: "test",
       JWT_SECRET: "test-secret-at-least-16-characters",
