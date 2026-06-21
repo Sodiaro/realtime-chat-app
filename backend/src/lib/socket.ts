@@ -29,6 +29,15 @@ interface ServerToClientEvents {
   "call:ice": (p: { from: string; candidate: unknown }) => void;
   "call:end": (p: { from: string }) => void;
   "call:reject": (p: { from: string }) => void;
+  // ---- group / multi-person calls (mesh) ----
+  "gcall:incoming": (p: { roomId: string; from: string; fromName?: string; fromPic?: string; video: boolean; title?: string; groupId?: string }) => void;
+  "gcall:peers": (p: { roomId: string; peers: { userId: string; name?: string; pic?: string }[] }) => void;
+  "gcall:peer-joined": (p: { roomId: string; userId: string; name?: string; pic?: string }) => void;
+  "gcall:offer": (p: { roomId: string; from: string; offer: unknown }) => void;
+  "gcall:answer": (p: { roomId: string; from: string; answer: unknown }) => void;
+  "gcall:ice": (p: { roomId: string; from: string; candidate: unknown }) => void;
+  "gcall:peer-left": (p: { roomId: string; userId: string }) => void;
+  "gcall:state": (p: { roomId: string; groupId?: string; active: boolean; count: number }) => void;
 }
 
 interface ClientToServerEvents {
@@ -41,6 +50,13 @@ interface ClientToServerEvents {
   "call:ice": (p: { to: string; candidate: unknown }) => void;
   "call:end": (p: { to: string }) => void;
   "call:reject": (p: { to: string }) => void;
+  // ---- group / multi-person calls (mesh) ----
+  "gcall:invite": (p: { roomId: string; groupId?: string; to: string[]; video: boolean; title?: string; fromName?: string; fromPic?: string }) => void;
+  "gcall:join": (p: { roomId: string; groupId?: string; name?: string; pic?: string }) => void;
+  "gcall:offer": (p: { roomId: string; to: string; offer: unknown }) => void;
+  "gcall:answer": (p: { roomId: string; to: string; answer: unknown }) => void;
+  "gcall:ice": (p: { roomId: string; to: string; candidate: unknown }) => void;
+  "gcall:leave": (p: { roomId: string }) => void;
 }
 
 const app = express();
@@ -61,6 +77,36 @@ if (adapterClients) {
 }
 
 const userRoom = (userId: string) => `user:${userId}`;
+
+// ---- group-call room state (in-memory; single-node) ----
+// roomId -> (userId -> { name, pic }); roomMeta tracks the group + who to notify
+// so members can join a group call after it has already started.
+type RoomMember = { name?: string; pic?: string };
+const callRooms = new Map<string, Map<string, RoomMember>>();
+const roomMeta = new Map<string, { groupId?: string; notify: Set<string> }>();
+
+function broadcastCallState(roomId: string, active: boolean) {
+  const meta = roomMeta.get(roomId);
+  if (!meta?.groupId) return; // only group calls advertise an "ongoing" state
+  const count = callRooms.get(roomId)?.size ?? 0;
+  for (const uid of meta.notify) {
+    io.to(userRoom(uid)).emit("gcall:state", { roomId, groupId: meta.groupId, active, count });
+  }
+}
+
+function leaveCallRoom(roomId: string, uid: string) {
+  const members = callRooms.get(roomId);
+  if (!members || !members.has(uid)) return;
+  members.delete(uid);
+  for (const other of members.keys()) io.to(userRoom(other)).emit("gcall:peer-left", { roomId, userId: uid });
+  if (members.size === 0) {
+    callRooms.delete(roomId);
+    broadcastCallState(roomId, false);
+    roomMeta.delete(roomId);
+  } else {
+    broadcastCallState(roomId, true);
+  }
+}
 
 export async function getOnlineUserIds(): Promise<string[]> {
   const adapter = io.of("/").adapter as unknown as {
@@ -171,8 +217,62 @@ io.on("connection", async (socket) => {
     if (typeof to === "string") io.to(userRoom(to)).emit("call:reject", { from: userId });
   });
 
+  // ---- group / multi-person call signaling (mesh) ----
+  // ring the invitees; remember who can join later (group calls)
+  socket.on("gcall:invite", ({ roomId, groupId, to, video, title, fromName, fromPic }) => {
+    if (typeof roomId !== "string" || !Array.isArray(to)) return;
+    const recipients = to.filter((t): t is string => typeof t === "string");
+    roomMeta.set(roomId, { groupId, notify: new Set<string>([userId, ...recipients]) });
+    for (const t of recipients) {
+      io.to(userRoom(t)).emit("gcall:incoming", { roomId, from: userId, fromName, fromPic, video: Boolean(video), title, groupId });
+    }
+  });
+
+  // join the room → learn existing peers, and let them know about me
+  socket.on("gcall:join", ({ roomId, groupId, name, pic }) => {
+    if (typeof roomId !== "string") return;
+    let members = callRooms.get(roomId);
+    if (!members) {
+      members = new Map();
+      callRooms.set(roomId, members);
+    }
+    const existing = [...members.entries()]
+      .filter(([uid]) => uid !== userId)
+      .map(([uid, m]) => ({ userId: uid, name: m.name, pic: m.pic }));
+    members.set(userId, { name, pic });
+
+    const meta = roomMeta.get(roomId);
+    if (!meta) roomMeta.set(roomId, { groupId, notify: new Set([userId]) });
+    else {
+      if (groupId && !meta.groupId) meta.groupId = groupId;
+      meta.notify.add(userId);
+    }
+
+    io.to(userRoom(userId)).emit("gcall:peers", { roomId, peers: existing });
+    for (const uid of members.keys()) {
+      if (uid !== userId) io.to(userRoom(uid)).emit("gcall:peer-joined", { roomId, userId, name, pic });
+    }
+    broadcastCallState(roomId, true);
+  });
+
+  // per-pair SDP / ICE relay, scoped to the room
+  socket.on("gcall:offer", ({ roomId, to, offer }) => {
+    if (typeof to === "string") io.to(userRoom(to)).emit("gcall:offer", { roomId, from: userId, offer });
+  });
+  socket.on("gcall:answer", ({ roomId, to, answer }) => {
+    if (typeof to === "string") io.to(userRoom(to)).emit("gcall:answer", { roomId, from: userId, answer });
+  });
+  socket.on("gcall:ice", ({ roomId, to, candidate }) => {
+    if (typeof to === "string") io.to(userRoom(to)).emit("gcall:ice", { roomId, from: userId, candidate });
+  });
+  socket.on("gcall:leave", ({ roomId }) => {
+    if (typeof roomId === "string") leaveCallRoom(roomId, userId);
+  });
+
   socket.on("disconnect", async () => {
     socketConnectionsActive.dec();
+    // drop out of any group calls this socket was in
+    for (const roomId of [...callRooms.keys()]) leaveCallRoom(roomId, userId);
     const online = await getOnlineUserIds();
     // if this was the user's last device, stamp their last-seen time
     if (!online.includes(userId)) {

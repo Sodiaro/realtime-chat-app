@@ -16,8 +16,10 @@ import JoinGroupPage from "./pages/JoinGroupPage";
 import { useAuthStore } from "./store/useAuthStore";
 import { useChatStore } from "./store/useChatStore";
 import { useCallStore } from "./store/useCallStore";
+import { useGroupCallStore } from "./store/useGroupCallStore";
 import { registerPush } from "./lib/push";
 import CallOverlay from "./components/CallOverlay";
+import GroupCallOverlay from "./components/GroupCallOverlay";
 import StatusViewer from "./components/StatusViewer";
 import CreateStatusModal from "./components/CreateStatusModal";
 import PanelHost from "./components/PanelHost";
@@ -29,6 +31,7 @@ const App = () => {
   const { authUser, checkAuth, isCheckingAuth, socket } = useAuthStore();
   const { subscribeSocket, unsubscribeSocket, conversations } = useChatStore();
   const { subscribeCall, unsubscribeCall } = useCallStore();
+  const { subscribeGroupCall, unsubscribeGroupCall } = useGroupCallStore();
 
   // total unread across non-archived conversations → browser tab title
   const totalUnread = conversations.reduce(
@@ -48,11 +51,13 @@ const App = () => {
     if (!socket) return;
     subscribeSocket();
     subscribeCall();
+    subscribeGroupCall();
     return () => {
       unsubscribeSocket();
       unsubscribeCall();
+      unsubscribeGroupCall();
     };
-  }, [socket, subscribeSocket, unsubscribeSocket, subscribeCall, unsubscribeCall]);
+  }, [socket, subscribeSocket, unsubscribeSocket, subscribeCall, unsubscribeCall, subscribeGroupCall, unsubscribeGroupCall]);
 
   // ask for notification permission + register web push once logged in
   useEffect(() => {
@@ -92,6 +97,7 @@ const App = () => {
       </Routes>
 
       <CallOverlay />
+      <GroupCallOverlay />
       <StatusViewer />
       <CreateStatusModal />
       <PanelHost />

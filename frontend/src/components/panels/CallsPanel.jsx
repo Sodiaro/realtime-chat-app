@@ -4,7 +4,8 @@ import { useAuthStore } from "../../store/useAuthStore";
 import { useChatStore } from "../../store/useChatStore";
 import { usePanelStore } from "../../store/usePanelStore";
 import Avatar from "../Avatar";
-import { Phone, Video, PhoneIncoming, PhoneOutgoing, PhoneMissed } from "lucide-react";
+import NewGroupCallModal from "../NewGroupCallModal";
+import { Phone, Video, PhoneIncoming, PhoneOutgoing, PhoneMissed, Users } from "lucide-react";
 
 const fmtDur = (s) => (s ? `${Math.floor(s / 60)}m ${s % 60}s` : "");
 const fmtWhen = (d) => new Date(d).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
@@ -15,6 +16,7 @@ const CallsPanel = () => {
   const { closePanel } = usePanelStore();
   const [calls, setCalls] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showNewCall, setShowNewCall] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -39,12 +41,25 @@ const CallsPanel = () => {
     closePanel();
   };
 
-  if (loading) return <p className="p-4 opacity-60">Loading…</p>;
-  if (calls.length === 0)
-    return <p className="p-8 opacity-60 text-center text-sm">No calls yet.</p>;
+  const newCallButton = (
+    <button onClick={() => setShowNewCall(true)} className="btn btn-primary btn-sm w-full gap-2 mb-3">
+      <Users className="size-4" /> New group call
+    </button>
+  );
+
+  if (loading)
+    return (
+      <>
+        {newCallButton}
+        <p className="p-4 opacity-60">Loading…</p>
+        {showNewCall && <NewGroupCallModal onClose={() => setShowNewCall(false)} />}
+      </>
+    );
 
   return (
     <div className="space-y-1">
+      {newCallButton}
+      {calls.length === 0 && <p className="p-8 opacity-60 text-center text-sm">No calls yet.</p>}
       {calls.map((c) => {
         const outgoing = String(c.callerId?._id) === authUser._id;
         const other = outgoing ? c.calleeId : c.callerId;
@@ -73,6 +88,7 @@ const CallsPanel = () => {
           </button>
         );
       })}
+      {showNewCall && <NewGroupCallModal onClose={() => setShowNewCall(false)} />}
     </div>
   );
 };

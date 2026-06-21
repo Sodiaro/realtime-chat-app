@@ -3,6 +3,7 @@ import { X, Search, Ban, MoreVertical, BellOff, Bell, Archive, Info, UserRound, 
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 import { useCallStore } from "../store/useCallStore";
+import { useGroupCallStore } from "../store/useGroupCallStore";
 import { axiosInstance } from "../lib/axios";
 import { formatLastSeen, formatMessageTime } from "../lib/utils";
 import GroupInfoModal from "./GroupInfoModal";
@@ -20,6 +21,15 @@ const ChatHeader = () => {
   const [showGroupInfo, setShowGroupInfo] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const { startCall } = useCallStore();
+  const { startGroupCall, joinExisting, activeGroupCalls, inCall: inGroupCall } = useGroupCallStore();
+
+  // group call: members to ring + whether a call is already running in this group
+  const memberIds = isGroup
+    ? (selectedUser.participants || []).map((p) => p._id || p).filter((id) => String(id) !== authUser?._id)
+    : [];
+  const groupActive = isGroup ? activeGroupCalls[selectedUser._id] : null;
+  const startGroup = (video) =>
+    startGroupCall({ groupId: selectedUser._id, invitees: memberIds, video, title: selectedUser.fullName });
 
   // the conversation backing this chat (groups use their own id; DMs match by participant)
   const conv = isGroup
@@ -111,6 +121,36 @@ const ChatHeader = () => {
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
+          {isGroup && !inGroupCall && (
+            groupActive ? (
+              <button
+                onClick={() => joinExisting({ roomId: groupActive.roomId, groupId: selectedUser._id, video: false, title: selectedUser.fullName })}
+                className="btn btn-success btn-sm gap-1.5 text-success-content animate-pulse"
+                title="Join the ongoing call"
+              >
+                <Phone className="size-4" /> Join{groupActive.count ? ` · ${groupActive.count}` : ""}
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={() => startGroup(false)}
+                  title="Group voice call"
+                  aria-label="Group voice call"
+                  className="btn btn-ghost btn-sm btn-circle text-base-content/70 hover:text-base-content"
+                >
+                  <Phone className="size-5" />
+                </button>
+                <button
+                  onClick={() => startGroup(true)}
+                  title="Group video call"
+                  aria-label="Group video call"
+                  className="btn btn-ghost btn-sm btn-circle text-base-content/70 hover:text-base-content"
+                >
+                  <Video className="size-5" />
+                </button>
+              </>
+            )
+          )}
           {!isGroup && !isSelf && (
             <button
               onClick={() => startCall(selectedUser, false)}
