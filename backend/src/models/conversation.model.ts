@@ -18,6 +18,8 @@ export interface IConversation {
   archivedBy: Types.ObjectId[];
   pinnedBy: Types.ObjectId[]; // users who pinned this chat to the top
   disappearMinutes?: number; // 0/undefined = off
+  communityId?: Types.ObjectId; // group belongs to a community
+  isAnnouncement?: boolean; // the community's announcement channel
   createdAt: Date;
   updatedAt: Date;
 }
@@ -40,6 +42,8 @@ const conversationSchema = new Schema<IConversation>(
     archivedBy: [{ type: Schema.Types.ObjectId, ref: "User" }],
     pinnedBy: [{ type: Schema.Types.ObjectId, ref: "User" }],
     disappearMinutes: { type: Number },
+    communityId: { type: Schema.Types.ObjectId, ref: "Community", index: true },
+    isAnnouncement: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

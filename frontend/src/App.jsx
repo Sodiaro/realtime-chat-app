@@ -10,6 +10,7 @@ import SettingsPage from "./pages/SettingsPage";
 import ProfilePage from "./pages/ProfilePage";
 import AdminPage from "./pages/AdminPage";
 import SearchPage from "./pages/SearchPage";
+import CommunitiesPage from "./pages/CommunitiesPage";
 import JoinGroupPage from "./pages/JoinGroupPage";
 
 import { useAuthStore } from "./store/useAuthStore";
@@ -86,6 +87,7 @@ const App = () => {
         <Route path="/profile" element={authUser ? <ProfilePage /> : <Navigate to="/login" />} />
         <Route path="/admin" element={authUser ? <AdminPage /> : <Navigate to="/login" />} />
         <Route path="/search" element={authUser ? <SearchPage /> : <Navigate to="/login" />} />
+        <Route path="/communities" element={authUser ? <CommunitiesPage /> : <Navigate to="/login" />} />
         <Route path="/join/:code" element={authUser ? <JoinGroupPage /> : <Navigate to="/login" />} />
       </Routes>
 

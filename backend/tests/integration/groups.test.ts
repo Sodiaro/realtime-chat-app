@@ -65,6 +65,27 @@ describe("group power-ups", () => {
     expect(ok.status).toBe(201);
   });
 
+  it("enforces unique standalone group names on create and rename", async () => {
+    const owner = await makeUser("uq");
+    const m = await makeUser("uqm");
+
+    const g1 = await owner.agent.post("/api/messages/group").send({ name: "UniqueTeam", members: [m.id] });
+    expect(g1.status).toBe(201);
+
+    // duplicate create (case-insensitive / trimmed) is rejected
+    const dup = await owner.agent.post("/api/messages/group").send({ name: "  uniqueteam ", members: [m.id] });
+    expect(dup.status).toBe(409);
+
+    // renaming another group onto an existing name is rejected
+    const g2 = await owner.agent.post("/api/messages/group").send({ name: "OtherTeam", members: [m.id] });
+    const clash = await owner.agent.patch(`/api/messages/conversation/${g2.body._id}`).send({ name: "UniqueTeam" });
+    expect(clash.status).toBe(409);
+
+    // renaming a group to its own name (no real change) is fine
+    const noop = await owner.agent.patch(`/api/messages/conversation/${g2.body._id}`).send({ name: "OtherTeam" });
+    expect(noop.status).toBe(200);
+  });
+
   it("records group read receipts when a member opens the chat", async () => {
     const a = await makeUser("ra");
     const b = await makeUser("rb");

@@ -28,6 +28,7 @@ export const openapiSpec = {
     { name: "Push" },
     { name: "Calls" },
     { name: "Status" },
+    { name: "Communities" },
     { name: "System" },
   ],
   components: {
@@ -647,7 +648,7 @@ export const openapiSpec = {
             properties: { name: { type: "string" }, members: { type: "array", items: ID } },
           }),
         },
-        responses: { 201: ok("Created group", ref("Conversation")) },
+        responses: { 201: ok("Created group", ref("Conversation")), 409: ok("Duplicate group name") },
       },
     },
     "/api/messages/conversation/{conversationId}/shared": {
@@ -711,7 +712,7 @@ export const openapiSpec = {
             },
           }),
         },
-        responses: { 200: ok("Updated group", ref("Conversation")), 403: ok("Admins only") },
+        responses: { 200: ok("Updated group", ref("Conversation")), 403: ok("Admins only"), 409: ok("Duplicate group name") },
       },
     },
     "/api/messages/conversation/{conversationId}/admin": {
@@ -988,6 +989,85 @@ export const openapiSpec = {
         security: auth,
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
         responses: { 200: ok("Deleted") },
+      },
+    },
+    // ---------- Communities ----------
+    "/api/communities": {
+      get: {
+        tags: ["Communities"],
+        summary: "List communities I belong to (with group + member counts)",
+        security: auth,
+        responses: { 200: ok("My communities") },
+      },
+      post: {
+        tags: ["Communities"],
+        summary: "Create a community + its announcement channel",
+        security: auth,
+        requestBody: {
+          required: true,
+          content: json({
+            type: "object",
+            required: ["name"],
+            properties: { name: { type: "string" }, description: { type: "string" } },
+          }),
+        },
+        responses: { 201: ok("Created community + announcement channel"), 409: ok("Name already taken") },
+      },
+    },
+    "/api/communities/{id}": {
+      get: {
+        tags: ["Communities"],
+        summary: "Community detail: announcement, groups (with my membership), members (members only)",
+        security: auth,
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: ok("Community detail"), 403: ok("Join to view") },
+      },
+    },
+    "/api/communities/{id}/groups": {
+      post: {
+        tags: ["Communities"],
+        summary: "Create a group inside the community (admins only)",
+        security: auth,
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: json({
+            type: "object",
+            required: ["name"],
+            properties: { name: { type: "string" }, members: { type: "array", items: ID } },
+          }),
+        },
+        responses: { 201: ok("Created group", ref("Conversation")), 403: ok("Admins only"), 409: ok("Duplicate group name in this community") },
+      },
+    },
+    "/api/communities/{id}/join": {
+      post: {
+        tags: ["Communities"],
+        summary: "Join the community (and its announcement channel)",
+        security: auth,
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: ok("Joined community") },
+      },
+    },
+    "/api/communities/{id}/leave": {
+      post: {
+        tags: ["Communities"],
+        summary: "Leave the community (removes you from its conversations)",
+        security: auth,
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: ok("Left community") },
+      },
+    },
+    "/api/communities/{id}/groups/{groupId}/join": {
+      post: {
+        tags: ["Communities"],
+        summary: "Join one specific group within the community",
+        security: auth,
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+          { name: "groupId", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: { 200: ok("Joined group", ref("Conversation")), 403: ok("Join the community first") },
       },
     },
     // ---------- Push ----------

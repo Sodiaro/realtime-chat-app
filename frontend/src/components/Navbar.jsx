@@ -7,7 +7,7 @@ import { usePanelStore } from "../store/usePanelStore";
 import Avatar from "./Avatar";
 import ConfirmModal from "./ui/ConfirmModal";
 import {
-  LogOut, MessageSquare, Settings, User, Shield, Star, Phone, Clock, UserRound, Sun, Moon,
+  LogOut, MessageSquare, Settings, User, Shield, Star, Phone, Clock, UserRound, Users, Sun, Moon,
 } from "lucide-react";
 
 // compact icon-only nav button that opens a slide-over panel
@@ -70,6 +70,16 @@ const Navbar = () => {
               <IconBtn onClick={() => openPanel("calls")} icon={<Phone className="size-[18px]" />} label="Calls" active={panel === "calls"} />
               <IconBtn onClick={() => openPanel("scheduled")} icon={<Clock className="size-[18px]" />} label="Scheduled" active={panel === "scheduled"} />
               <IconBtn onClick={() => openPanel("starred")} icon={<Star className="size-[18px]" />} label="Starred" active={panel === "starred"} />
+              <Link
+                to="/communities"
+                aria-label="Communities"
+                title="Communities"
+                className={`btn btn-ghost btn-sm btn-circle ${
+                  pathname === "/communities" ? "text-primary bg-primary/10" : "text-base-content/60 hover:text-base-content"
+                }`}
+              >
+                <Users className="size-[18px]" />
+              </Link>
             </nav>
           )}
 

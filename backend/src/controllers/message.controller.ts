@@ -833,6 +833,23 @@ export const viewMessage: RequestHandler = async (req, res, next) => {
 
 // group chats
 
+// case-insensitive group-name uniqueness. Scope: within a community for
+// community groups, otherwise globally among standalone groups.
+const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+async function groupNameTaken(
+  name: string,
+  opts: { communityId?: Types.ObjectId | null; excludeId?: Types.ObjectId | string } = {}
+): Promise<boolean> {
+  const query: Record<string, unknown> = {
+    isGroup: true,
+    isAnnouncement: { $ne: true },
+    name: new RegExp(`^${escRe(name.trim())}$`, "i"),
+    communityId: opts.communityId ? opts.communityId : { $exists: false },
+  };
+  if (opts.excludeId) query._id = { $ne: opts.excludeId };
+  return Boolean(await Conversation.findOne(query).select("_id").lean());
+}
+
 export const createGroup: RequestHandler = async (req, res, next) => {
   try {
     const myId = req.user!._id;
@@ -846,6 +863,11 @@ export const createGroup: RequestHandler = async (req, res, next) => {
       res.status(400).json({ message: "Add at least one member" });
       return;
     }
+    const cleanName = String(name).trim();
+    if (await groupNameTaken(cleanName)) {
+      res.status(409).json({ message: "A group with that name already exists" });
+      return;
+    }
 
     const participants = Array.from(new Set([String(myId), ...members.map(String)]));
     if (participants.length > MAX_GROUP_MEMBERS) {
@@ -856,7 +878,7 @@ export const createGroup: RequestHandler = async (req, res, next) => {
       key: `group:${new mongoose.Types.ObjectId().toString()}`,
       participants,
       isGroup: true,
-      name: String(name).trim(),
+      name: cleanName,
       admins: [myId],
     });
     await conversation.save();
@@ -1270,8 +1292,20 @@ export const renameGroup: RequestHandler = async (req, res, next) => {
       return void res.status(403).json({ message: "Admins only" });
 
     if (name !== undefined) {
-      if (!String(name).trim()) return void res.status(400).json({ message: "Name can't be empty" });
-      conv.name = String(name).trim();
+      const cleanName = String(name).trim();
+      if (!cleanName) return void res.status(400).json({ message: "Name can't be empty" });
+      if (
+        !conv.isAnnouncement &&
+        cleanName.toLowerCase() !== (conv.name || "").toLowerCase() &&
+        (await groupNameTaken(cleanName, { communityId: conv.communityId ?? null, excludeId: conv._id }))
+      ) {
+        return void res.status(409).json({
+          message: conv.communityId
+            ? "A group with that name already exists in this community"
+            : "A group with that name already exists",
+        });
+      }
+      conv.name = cleanName;
     }
     if (description !== undefined) conv.description = String(description).slice(0, 500);
     if (onlyAdminsCanMessage !== undefined) conv.onlyAdminsCanMessage = Boolean(onlyAdminsCanMessage);

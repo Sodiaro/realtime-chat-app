@@ -18,6 +18,7 @@ import adminRoutes from "./routes/admin.route.js";
 import pushRoutes from "./routes/push.route.js";
 import callRoutes from "./routes/call.route.js";
 import statusRoutes from "./routes/status.route.js";
+import communityRoutes from "./routes/community.route.js";
 import { apiLimiter } from "./middleware/rateLimit.js";
 import { errorHandler } from "./middleware/error.middleware.js";
 import { app } from "./lib/socket.js";
@@ -111,6 +112,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/push", pushRoutes);
 app.use("/api/calls", callRoutes);
 app.use("/api/status", statusRoutes);
+app.use("/api/communities", communityRoutes);
 
 if (env.NODE_ENV === "production") {
   app.use(express.static(path.join(__dirname, "../frontend/dist")));
