@@ -1,9 +1,8 @@
-# ChatApp 💬
+# DevChat 💬
 
-A real-time chat application built with **React (Vite)**, **Node.js**, **Express**, **Socket.IO**, and **MongoDB Atlas**.  
-Users can authenticate, chat in real time, upload profile images, and personalize the UI with themes.
+A production-grade, real-time messaging platform built with **React (Vite)**, **Node.js + Express (TypeScript)**, **Socket.IO**, and **MongoDB**.
 
-This project demonstrates **full-stack development, authentication, WebSockets, and cloud integrations**.
+DevChat goes well beyond a basic chat demo — it includes rich messaging, voice/video calls, groups & communities, stories, disappearing & view-once messages, granular privacy controls, web push, and full observability (metrics, structured logs, OpenAPI docs).
 
 🔗 **Live Demo:** [https://devchat-8dde.onrender.com/](https://devchat-8dde.onrender.com/)
 
@@ -11,135 +10,148 @@ This project demonstrates **full-stack development, authentication, WebSockets, 
 
 ## ✨ Features
 
-### 🔐 Authentication
-- User signup & login
-- Secure password hashing with **bcrypt**
-- **JWT** stored in **HTTP-only cookies**
+### 🔐 Authentication & Account Security
+- Signup / login with **bcrypt**-hashed passwords
+- **JWT** in **HTTP-only cookies**, with token-versioning + **per-device sessions** (see & revoke active devices)
+- Forgot / reset password by **email or username** via crypto-secure **OTP codes** (hashed, brute-force lockout; codes never exposed in responses)
+- Change password, log out all other devices, delete account
 
-### 💬 Real-Time Chat
-- Instant messaging with **Socket.IO**
-- Message history
-- Image messaging via **Cloudinary**
-- Online user indicators
+### 💬 Real-Time Messaging
+- Instant delivery over **Socket.IO** (optional **Redis adapter** for multi-node scaling)
+- Text, **images**, **voice notes** (waveform player with 1×/1.5×/2× speed), **files/documents**, **location sharing**, **contact cards**, **polls**, and **link previews**
+- Replies, reactions, edit, delete, pin, star, and **forwarding across any conversation type** (DM↔group)
+- **@mentions**, delivery & read receipts, typing / recording indicators
+- Message search, **scheduled messages**, and per-chat **drafts**
+- Per-conversation **scroll restoration** (reopen where you left off)
 
-### 👤 User Profile
-- Update profile details
-- Upload avatar
-- Select UI theme with live preview
+### 👁️ View Once
+- Single-view content for **images, videos, documents, voice notes, and text**
+- Opens in a **dedicated fullscreen viewer**; consumed the moment it's opened or you look away
+- Neither sender nor recipient can reopen it; best-effort capture deterrents
 
-### 🖌 UI / UX
-- Responsive layout
-- **TailwindCSS + DaisyUI**
-- Toast notifications
-- Smooth developer-friendly UX
+### ⏱️ Disappearing Messages
+- Per-conversation timer (off / 1 day / 1 week); affects new messages only
+- In-timeline **system notices** when toggled + a header indicator; configurable default for new chats
+
+### 👥 Groups
+- Roles/admins, **invite links**, group photo & description, admins-only posting, group read receipts
+- **200-member cap** and **unique group names**
+
+### 🏘️ Communities
+- A community bundles multiple groups + a shared **announcement channel** (admins post, everyone reads)
+- À-la-carte membership (belong to some groups, not all), admin management, unique community & group names
+
+### 📞 Calls
+- **1:1 voice & video** calls over **WebRTC**, with a call-history timeline and accurate **Ringing/Calling** status _(group calling is on the roadmap)_
+
+### 📸 Stories / Status
+- 24-hour statuses with view receipts
+
+### 🛡️ Privacy
+- Visibility controls for **last seen**, **profile photo**, and **read receipts**
+- **Ghost Mode** (suppresses read/edit/delete/status-view signals, with a visible indicator for transparency)
+- **Block / unblock** users; self-chat **Notes** space
+
+### 🎨 Personalization & UX
+- Light / dark / **system** themes + chat **wallpapers**
+- **Resizable** desktop sidebars, slide-over panels (Contacts / Calls / Scheduled / Starred), unified conversation list with All/Chats/Groups tabs, archived chats, mute indicators
+- Comprehensive **Settings** page (profile, privacy, notifications, chat prefs, appearance, security, account…)
+- Browser notifications + **Web Push** (VAPID)
 
 ---
 
 ## 🛠 Tech Stack
 
-### Frontend
-- React + Vite  
-- TailwindCSS + DaisyUI  
-- React Router  
-- React Hot Toast  
+**Frontend:** React + Vite · Zustand · TailwindCSS + DaisyUI · React Router · React Hot Toast · WebRTC / Web Audio
 
-### Backend
-- Node.js + Express  
-- Socket.IO  
-- MongoDB Atlas  
-- JWT Authentication  
-- bcrypt  
-- Cloudinary  
+**Backend:** Node.js + Express (**TypeScript**) · Socket.IO (+ optional Redis adapter) · MongoDB + Mongoose · JWT · bcrypt · Cloudinary · Nodemailer (OTP email) · web-push (VAPID) · Zod (env validation) · Pino (structured logs) · prom-client (Prometheus metrics) · Swagger / OpenAPI
+
+**Testing:** Vitest · Supertest · mongodb-memory-server
 
 ---
 
 ## 🚀 Getting Started (Local Development)
 
-### 1️⃣ Clone the Repository
+### 1️⃣ Clone
 ```bash
 git clone https://github.com/Sodiaro/realtime-chat-app.git
 cd realtime-chat-app
-
 ```
 
-### 2️⃣ Backend Setup
-
+### 2️⃣ Backend
 ```bash
 cd backend
 npm install
-
 ```
-Create a `.env` file:
+
+Create a `backend/.env` file:
 
 ```ini
-PORT=5001
-MONGODB_URL=your_mongodb_uri
-JWT_SECRET=your_secret
+# Required
+MONGODB_URI=your_mongodb_uri
+JWT_SECRET=at_least_16_characters
 CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_key
 CLOUDINARY_API_SECRET=your_secret
-CORS_ORIGIN=http://localhost:5173
+CORS_ORIGIN=http://localhost:5173   # comma-separated for multiple origins
 
+# Optional — multi-node scaling
+REDIS_URL=redis://localhost:6379
+
+# Optional — real OTP emails (without these, OTPs are logged in dev)
+SMTP_HOST=
+SMTP_PORT=
+SMTP_USER=
+SMTP_PASS=
+EMAIL_FROM=DevChat <no-reply@devchat.local>
+
+# Optional — Web Push (disabled if absent)
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:admin@devchat.local
 ```
-Build the app
 
+Run it:
 ```bash
-npm run build
-
+npm run dev      # watch mode
+# or
+npm run build && npm start
 ```
 
-Start the app
-
-```bash
-npm start
-
-```
-
-### 3️⃣ Frontend Setup
-
+### 3️⃣ Frontend
 ```bash
 cd frontend
 npm install
-
-```
-
-Run frontend:
-
-```bash
 npm run dev
-
 ```
 
-Frontend runs at:
+- Frontend → `http://localhost:5173`
+- Backend → `http://localhost:5001`
 
+### 🧪 Tests
 ```bash
-http://localhost:5173
-
+cd backend
+npm test
 ```
 
-Backend runs at:
+---
 
-```bash
-http://localhost:5001
+## 📚 API Docs & Observability
+- **Swagger UI:** `/api-docs` (OpenAPI JSON at `/api-docs.json`)
+- **Metrics:** `/metrics` (Prometheus) · **Health:** `/health` · **Readiness:** `/ready`
 
-```
+---
 
 ## 📦 Deployment
+- **Frontend:** Vercel / Netlify (or served by the backend in production)
+- **Backend:** Render / Railway / Fly.io
+- **Database:** MongoDB Atlas · **Optional:** Redis (multi-node Socket.IO)
 
-You can deploy using platforms like:
-
-Vercel (Frontend)
-
-Render / Railway (Backend)
-
-MongoDB Atlas (Database)
-
+---
 
 ## 👨‍💻 Author
 
-Sodiq Semiu
-Full-Stack Developer
+**Sodiq Semiu** — Full-Stack Developer
 
-📧 Email: sodiqsemiu.dev@gmail.com
-
-🔗 LinkedIn: https://www.linkedin.com/in/sodiq-semiu/
+📧 sodiqsemiu.dev@gmail.com  
+🔗 [LinkedIn](https://www.linkedin.com/in/sodiq-semiu/)
