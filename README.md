@@ -146,6 +146,12 @@ npm test
 - **Frontend:** Vercel / Netlify (or served by the backend in production)
 - **Backend:** Render / Railway / Fly.io
 - **Database:** MongoDB Atlas · **Optional:** Redis (multi-node Socket.IO)
+- **Calls (optional):** set `VITE_TURN_URL` / `VITE_TURN_USERNAME` / `VITE_TURN_CREDENTIAL` to add a TURN server — required for calls between symmetric NATs.
+
+### Notes for production
+- **Name uniqueness** is enforced both in app logic and by **sparse unique indexes** (`Community.nameKey`, `Conversation.nameKey`). Mongoose creates these on boot. The indexes are *sparse*, so pre-existing documents without `nameKey` are skipped — no migration needed; new/edited names are normalized to a lowercased key automatically.
+- **Presence, group-call rooms and ghost-mode state are in-memory (single-node).** For horizontal scaling, run Redis (Socket.IO adapter) and move that ephemeral state into shared storage.
+- **Rate limits:** all `/api` routes share a limiter; community/invite creation has a tighter per-hour cap to curb abuse.
 
 ---
 
