@@ -1,7 +1,7 @@
 import { useChatStore } from "../store/useChatStore";
 import { useChatBgStore, bgClass } from "../store/useChatBgStore";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Pin, Mic, ChevronDown, Loader2, Phone } from "lucide-react";
+import { Pin, Mic, ChevronDown, Loader2, Phone, Megaphone } from "lucide-react";
 import { useGroupCallStore } from "../store/useGroupCallStore";
 
 import ChatHeader from "./ChatHeader";
@@ -195,6 +195,13 @@ const ChatContainer = () => {
           </span>
           <span className="font-medium text-success">Join</span>
         </button>
+      )}
+
+      {selectedUser?.isAnnouncement && (
+        <div className="w-full flex items-center gap-2 px-4 py-2 bg-base-200/70 border-b border-base-300 text-xs text-base-content/70">
+          <Megaphone className="size-4 shrink-0 text-primary" />
+          <span>Announcement channel — only admins can post here.</span>
+        </div>
       )}
 
       {latestPinned && (

@@ -4,6 +4,7 @@ import { io as ioc, type Socket } from "socket.io-client";
 import type { AddressInfo } from "net";
 import { app } from "../../src/app";
 import { server, io } from "../../src/lib/socket";
+import User from "../../src/models/user.model";
 import type { IMessage } from "../../src/models/message.model";
 
 let url: string;
@@ -160,6 +161,76 @@ describe("socket", () => {
     sockC.close();
     expect(mb.text).toBe("edited");
     expect(mc.text).toBe("edited");
+  });
+
+  it("suppresses read receipts for a ghost-mode reader (delivered, never seen)", async () => {
+    const a = await makeUser("ghrA");
+    const b = await makeUser("ghrB");
+    await User.findByIdAndUpdate(b.id, { ghostMode: true });
+
+    const sockA: Socket = connect(a.cookie);
+    const sockB: Socket = connect(b.cookie);
+    await Promise.all([
+      new Promise<void>((r) => sockA.on("connect", () => r())),
+      new Promise<void>((r) => sockB.on("connect", () => r())),
+    ]);
+
+    await a.agent.post(`/api/messages/send/${b.id}`).send({ text: "seen?" });
+
+    const outcome = await new Promise<string>((resolve) => {
+      const t = setTimeout(() => resolve("timeout"), 5000);
+      sockA.on("messagesRead", () => {
+        clearTimeout(t);
+        resolve("read");
+      });
+      sockA.on("messagesDelivered", () => {
+        clearTimeout(t);
+        resolve("delivered");
+      });
+      sockB.emit("markRead", { to: a.id });
+    });
+    sockA.close();
+    sockB.close();
+    expect(outcome).toBe("delivered"); // ghost reader is never revealed as "read"
+
+    const page = (await a.agent.get(`/api/messages/${b.id}`)).body;
+    const last = page.messages.at(-1);
+    expect(last.deliveredAt).toBeTruthy();
+    expect(last.readAt).toBeFalsy();
+  });
+
+  it("auto-declines a call to a ghost-mode (do-not-disturb) user", async () => {
+    const a = await makeUser("dndA");
+    const b = await makeUser("dndB");
+    await User.findByIdAndUpdate(b.id, { ghostMode: true });
+
+    const sockA: Socket = connect(a.cookie);
+    const sockB: Socket = connect(b.cookie);
+    await Promise.all([
+      new Promise<void>((r) => sockA.on("connect", () => r())),
+      new Promise<void>((r) => sockB.on("connect", () => r())),
+    ]);
+    // let the server's connect handler register b in the ghost set
+    await new Promise((r) => setTimeout(r, 400));
+
+    let bGotIncoming = false;
+    sockB.on("call:incoming", () => {
+      bGotIncoming = true;
+    });
+
+    const outcome = await new Promise<string>((resolve) => {
+      const t = setTimeout(() => resolve("timeout"), 5000);
+      sockA.on("call:reject", () => {
+        clearTimeout(t);
+        resolve("rejected");
+      });
+      sockA.emit("call:offer", { to: b.id, offer: {}, video: false });
+    });
+    await new Promise((r) => setTimeout(r, 200)); // ensure no incoming slipped through
+    sockA.close();
+    sockB.close();
+    expect(outcome).toBe("rejected");
+    expect(bGotIncoming).toBe(false);
   });
 
   it("marks a message delivered when the recipient is online", async () => {

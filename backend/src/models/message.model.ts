@@ -47,6 +47,7 @@ export interface ICallEvent {
   type: "audio" | "video";
   status: "answered" | "missed" | "rejected";
   durationSec?: number;
+  group?: boolean; // a group/multi-person call (rendered differently)
 }
 
 // in-timeline system notice (e.g. disappearing messages turned on/off)
@@ -115,7 +116,7 @@ const contactSchema = new Schema<IContactCard>(
   { _id: false }
 );
 const callSchema = new Schema<ICallEvent>(
-  { type: String, status: String, durationSec: Number },
+  { type: String, status: String, durationSec: Number, group: Boolean },
   { _id: false }
 );
 const systemSchema = new Schema<ISystemEvent>(

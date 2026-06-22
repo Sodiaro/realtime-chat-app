@@ -1,7 +1,7 @@
 import { memo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useShallow } from "zustand/react/shallow";
-import { Check, CheckCheck, Clock, AlertCircle, Pencil, Trash2, X, Reply, Forward, Pin, Flag, Star, FileText, Download, MapPin, MessageSquare, MoreVertical, Copy, Video, PhoneOutgoing, PhoneIncoming, PhoneMissed, Timer, Eye, EyeOff, Ghost } from "lucide-react";
+import { Check, CheckCheck, Clock, AlertCircle, Pencil, Trash2, X, Reply, Forward, Pin, Flag, Star, FileText, Download, MapPin, MessageSquare, MoreVertical, Copy, Video, PhoneOutgoing, PhoneIncoming, PhoneMissed, Timer, Eye, EyeOff, Ghost, Users } from "lucide-react";
 import toast from "react-hot-toast";
 import { useChatStore } from "../store/useChatStore";
 import { formatMessageTime } from "../lib/utils";
@@ -171,14 +171,16 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users, grouped 
     const c = message.call;
     const missed = c.status === "missed";
     const rejected = c.status === "rejected";
-    const danger = missed || rejected;
-    const Icon = c.type === "video" ? Video : danger ? PhoneMissed : isOwn ? PhoneOutgoing : PhoneIncoming;
-    const label = rejected
-      ? isOwn ? "Call declined" : "You declined the call"
-      : missed
-        ? isOwn ? "No answer" : "Missed call"
-        : isOwn ? "Outgoing call" : "Incoming call";
-    const dur = !danger && c.durationSec ? ` · ${fmtDuration(c.durationSec)}` : "";
+    const danger = !c.group && (missed || rejected);
+    const Icon = c.group ? Users : c.type === "video" ? Video : danger ? PhoneMissed : isOwn ? PhoneOutgoing : PhoneIncoming;
+    const label = c.group
+      ? isOwn ? "You started a group call" : "Group call"
+      : rejected
+        ? isOwn ? "Call declined" : "You declined the call"
+        : missed
+          ? isOwn ? "No answer" : "Missed call"
+          : isOwn ? "Outgoing call" : "Incoming call";
+    const dur = !danger && !c.group && c.durationSec ? ` · ${fmtDuration(c.durationSec)}` : "";
     return (
       <div className="flex justify-center my-3">
         <div

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import toast from "react-hot-toast";
 import { useAuthStore } from "./useAuthStore";
+import { axiosInstance } from "../lib/axios";
 import { startRingtone, stopRingtone } from "../lib/ringtone";
 import { ICE_SERVERS } from "../lib/iceConfig";
 
@@ -120,6 +121,10 @@ export const useGroupCallStore = create((set, get) => ({
         fromName: u?.fullName,
         fromPic: u?.profilePic,
       });
+      // log it to the group timeline + push offline members (group calls only)
+      if (groupId) {
+        axiosInstance.post("/calls/group", { conversationId: groupId, type: video ? "video" : "audio" }).catch(() => {});
+      }
     } catch {
       toast.error("Couldn't start call — camera/mic blocked?");
       get()._teardown();
