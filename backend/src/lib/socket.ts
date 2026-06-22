@@ -29,6 +29,8 @@ interface ServerToClientEvents {
   "call:ice": (p: { from: string; candidate: unknown }) => void;
   "call:end": (p: { from: string }) => void;
   "call:reject": (p: { from: string }) => void;
+  "call:renegotiate": (p: { from: string; offer: unknown }) => void; // mid-call track change (screen share / voice→video)
+  "call:renegotiate-answer": (p: { from: string; answer: unknown }) => void;
   // ---- group / multi-person calls (mesh) ----
   "gcall:incoming": (p: { roomId: string; from: string; fromName?: string; fromPic?: string; video: boolean; title?: string; groupId?: string }) => void;
   "gcall:peers": (p: { roomId: string; peers: { userId: string; name?: string; pic?: string }[] }) => void;
@@ -50,6 +52,8 @@ interface ClientToServerEvents {
   "call:ice": (p: { to: string; candidate: unknown }) => void;
   "call:end": (p: { to: string }) => void;
   "call:reject": (p: { to: string }) => void;
+  "call:renegotiate": (p: { to: string; offer: unknown }) => void;
+  "call:renegotiate-answer": (p: { to: string; answer: unknown }) => void;
   // ---- group / multi-person calls (mesh) ----
   "gcall:invite": (p: { roomId: string; groupId?: string; to: string[]; video: boolean; title?: string; fromName?: string; fromPic?: string }) => void;
   "gcall:join": (p: { roomId: string; groupId?: string; name?: string; pic?: string }) => void;
@@ -241,6 +245,13 @@ io.on("connection", async (socket) => {
   });
   socket.on("call:reject", ({ to }) => {
     if (typeof to === "string") io.to(userRoom(to)).emit("call:reject", { from: userId });
+  });
+  // mid-call renegotiation (adding/replacing a video track)
+  socket.on("call:renegotiate", ({ to, offer }) => {
+    if (typeof to === "string") io.to(userRoom(to)).emit("call:renegotiate", { from: userId, offer });
+  });
+  socket.on("call:renegotiate-answer", ({ to, answer }) => {
+    if (typeof to === "string") io.to(userRoom(to)).emit("call:renegotiate-answer", { from: userId, answer });
   });
 
   // ---- group / multi-person call signaling (mesh) ----

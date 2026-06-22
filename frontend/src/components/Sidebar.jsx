@@ -7,7 +7,7 @@ import CreateGroupModal from "./CreateGroupModal";
 import NewChatModal from "./NewChatModal";
 import StatusBar from "./StatusBar";
 import Avatar from "./Avatar";
-import { Plus, BellOff, Pin, Archive, Search, X, UserPlus, UsersRound, ArrowLeft, ChevronRight, Bookmark } from "lucide-react";
+import { Plus, BellOff, Pin, Archive, Search, X, UserPlus, UsersRound, ArrowLeft, ChevronRight } from "lucide-react";
 
 // short preview of a conversation's last message for the list subtitle
 const lastMessagePreview = (conv) => {
@@ -84,11 +84,25 @@ const Sidebar = () => {
     (c) => !c.isGroup && c.participants?.length > 0 && c.participants.every((p) => String(p._id || p) === authUser?._id)
   );
 
+  // the self-chat shows as a normal DM with yourself (always available)
+  const selfItem = authUser
+    ? {
+        key: "u-self",
+        kind: "dm",
+        x: { u: { ...authUser, isSelf: true }, conv: selfConv },
+        time: lastAt(selfConv),
+        pinned: selfConv?.isPinned ? 1 : 0,
+      }
+    : null;
+
   // one unified, recency-sorted list (pinned first), filtered by the active tab
   const allItems = [
+    ...(selfItem ? [selfItem] : []),
     ...activeUsers.map((x) => ({ key: `u-${x.u._id}`, kind: "dm", x, time: lastAt(x.conv), pinned: x.conv?.isPinned ? 1 : 0 })),
     ...activeGroups.map((c) => ({ key: `g-${c._id}`, kind: "group", c, time: lastAt(c), pinned: c.isPinned ? 1 : 0 })),
   ].sort((a, b) => b.pinned - a.pinned || b.time - a.time);
+
+  const itemName = (i) => (i.kind === "dm" ? i.x.u.fullName : i.c.name);
   const tabItems =
     tab === "chats"
       ? allItems.filter((i) => i.kind === "dm")
@@ -97,11 +111,7 @@ const Sidebar = () => {
         : allItems;
   // the sidebar search filters the existing conversation list by name
   const q = query.trim().toLowerCase();
-  const visibleItems = q
-    ? tabItems.filter((i) =>
-        (i.kind === "group" ? i.c.name : i.x.u.fullName)?.toLowerCase().includes(q)
-      )
-    : tabItems;
+  const visibleItems = q ? tabItems.filter((i) => itemName(i)?.toLowerCase().includes(q)) : tabItems;
   const TABS = [
     { key: "all", label: "All" },
     { key: "chats", label: "Chats" },
@@ -153,12 +163,15 @@ const Sidebar = () => {
       <Avatar user={user} size="size-14" className="shrink-0" />
       <div className="flex items-center w-full text-left min-w-0 gap-1">
         <div className="min-w-0">
-          <div className="font-medium truncate">{user.fullName}</div>
+          <div className="font-medium truncate">
+            {user.fullName}
+            {user.isSelf && <span className="opacity-50"> (You)</span>}
+          </div>
           <div className="text-sm truncate text-base-content/55">
             {drafts[user._id] && selectedUser?._id !== user._id ? (
               <span className="text-error">Draft: {drafts[user._id]}</span>
             ) : (
-              lastMessagePreview(conv)
+              lastMessagePreview(conv) || (user.isSelf ? "Note to self" : "")
             )}
           </div>
         </div>
@@ -260,31 +273,6 @@ const Sidebar = () => {
           </>
         ) : (
           <>
-            {/* personal notes / self-chat — always available at the top */}
-            {tab !== "groups" && !q && (
-              <button
-                onClick={() => setSelectedUser({ ...authUser, isSelf: true })}
-                className={`w-full p-3 rounded-xl flex items-center gap-3.5 hover:bg-base-200 transition-colors ${
-                  selectedUser?.isSelf ? "bg-primary/10" : ""
-                }`}
-              >
-                <div className="relative shrink-0">
-                  <Avatar user={authUser} size="size-14" />
-                  <span className="absolute -bottom-0.5 -right-0.5 size-5 rounded-full bg-primary text-primary-content grid place-items-center ring-2 ring-base-100">
-                    <Bookmark className="size-3" />
-                  </span>
-                </div>
-                <div className="flex items-center w-full text-left min-w-0 gap-1">
-                  <div className="min-w-0">
-                    <div className="font-medium truncate">Notes</div>
-                    <div className="text-sm truncate text-base-content/55">
-                      {lastMessagePreview(selfConv) || "Message yourself"}
-                    </div>
-                  </div>
-                </div>
-              </button>
-            )}
-
             {/* archived appears as a normal category at the top of the list */}
             {archivedCount > 0 && tab === "all" && !q && (
               <button

@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useCallStore } from "../store/useCallStore";
 import { useAuthStore } from "../store/useAuthStore";
 import Avatar from "./Avatar";
-import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff } from "lucide-react";
+import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff, MonitorUp } from "lucide-react";
 
 const Stream = ({ stream, muted, className }) => {
   const ref = useRef(null);
@@ -21,11 +21,16 @@ const CallOverlay = () => {
     localStream,
     muted,
     cameraOff,
+    sharing,
+    localVideo,
+    remoteVideo,
     acceptCall,
     rejectCall,
     endCall,
     toggleMute,
     toggleCamera,
+    enableVideo,
+    toggleScreenShare,
   } = useCallStore();
   const { onlineUsers } = useAuthStore();
 
@@ -59,18 +64,18 @@ const CallOverlay = () => {
   return (
     <div className="fixed inset-0 z-[60] bg-base-300 flex flex-col">
       <div className="flex-1 relative grid place-items-center overflow-hidden">
-        {isVideo && remoteStream ? (
+        {remoteVideo && remoteStream ? (
           <Stream stream={remoteStream} className="w-full h-full object-cover" />
         ) : (
           <div className="text-center">
             <Avatar user={peerUser} size="size-28" className="mx-auto" />
             <h3 className="mt-4 text-2xl font-semibold">{peer?.name}</h3>
             <p className="opacity-60 mt-1">{callState === "calling" ? outgoingStatus : "In call"}</p>
-            {!isVideo && remoteStream && <Stream stream={remoteStream} className="hidden" />}
+            {remoteStream && <Stream stream={remoteStream} className="hidden" />}
           </div>
         )}
 
-        {isVideo && localStream && (
+        {localVideo && localStream && (
           <Stream
             stream={localStream}
             muted
@@ -83,11 +88,22 @@ const CallOverlay = () => {
         <button onClick={toggleMute} className="btn btn-circle btn-lg" title={muted ? "Unmute" : "Mute"}>
           {muted ? <MicOff /> : <Mic />}
         </button>
-        {isVideo && (
+        {localVideo ? (
           <button onClick={toggleCamera} className="btn btn-circle btn-lg" title="Toggle camera">
             {cameraOff ? <VideoOff /> : <Video />}
           </button>
+        ) : (
+          <button onClick={enableVideo} className="btn btn-circle btn-lg" title="Turn on camera">
+            <Video />
+          </button>
         )}
+        <button
+          onClick={toggleScreenShare}
+          className={`btn btn-circle btn-lg ${sharing ? "btn-primary" : ""}`}
+          title={sharing ? "Stop sharing" : "Share screen"}
+        >
+          <MonitorUp />
+        </button>
         <button onClick={() => endCall()} className="btn btn-circle btn-lg btn-error" title="Hang up">
           <PhoneOff />
         </button>

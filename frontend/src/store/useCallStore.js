@@ -15,6 +15,7 @@ let pendingOffer = null;
 let isCaller = false;
 let connectedAt = null;
 let wasRejected = false;
+let screenTrack = null;
 
 const sock = () => useAuthStore.getState().socket;
 
@@ -24,6 +25,9 @@ export const useCallStore = create((set, get) => ({
   isVideo: false,
   muted: false,
   cameraOff: false,
+  sharing: false, // screen sharing
+  localVideo: false, // I'm sending a video track
+  remoteVideo: false, // the peer is sending a video track
   remoteStream: null,
   localStream: null,
 
@@ -34,8 +38,14 @@ export const useCallStore = create((set, get) => ({
 
     const remote = new MediaStream();
     pc.ontrack = (e) => {
-      e.streams[0].getTracks().forEach((t) => remote.addTrack(t));
-      set({ remoteStream: remote });
+      e.streams[0].getTracks().forEach((t) => {
+        try {
+          remote.addTrack(t);
+        } catch {
+          /* already added */
+        }
+      });
+      set({ remoteStream: remote, remoteVideo: remote.getVideoTracks().length > 0 });
     };
     pc.onicecandidate = (e) => {
       if (e.candidate) sock()?.emit("call:ice", { to: peerId, candidate: e.candidate });
@@ -43,7 +53,7 @@ export const useCallStore = create((set, get) => ({
     pc.onconnectionstatechange = () => {
       if (["disconnected", "failed", "closed"].includes(pc?.connectionState)) get().endCall(true);
     };
-    set({ localStream });
+    set({ localStream, localVideo: video });
   },
 
   startCall: async (user, video) => {
@@ -131,6 +141,65 @@ export const useCallStore = create((set, get) => ({
     set({ cameraOff: off });
   },
 
+  _renegotiate: async () => {
+    if (!pc) return;
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      sock()?.emit("call:renegotiate", { to: get().peer?.id, offer });
+    } catch {
+      /* ignore */
+    }
+  },
+
+  // turn a voice call into a video call by adding a camera track + renegotiating
+  enableVideo: async () => {
+    if (!pc || !localStream || get().localVideo) return;
+    try {
+      const cam = await navigator.mediaDevices.getUserMedia({ video: true });
+      const track = cam.getVideoTracks()[0];
+      localStream.addTrack(track);
+      pc.addTrack(track, localStream);
+      await get()._renegotiate();
+      set({ isVideo: true, localVideo: true, cameraOff: false });
+    } catch {
+      toast.error("Couldn't turn on the camera");
+    }
+  },
+
+  // share the screen: replace the camera track, or add one (+ renegotiate) on a voice call
+  toggleScreenShare: async () => {
+    if (!pc || !localStream) return;
+    const videoSender = () => pc.getSenders().find((s) => s.track?.kind === "video");
+    if (get().sharing) {
+      const cam = localStream.getVideoTracks().find((t) => t.readyState === "live" && t !== screenTrack);
+      const sender = videoSender();
+      if (sender) await sender.replaceTrack(cam || null);
+      screenTrack?.stop();
+      screenTrack = null;
+      set({ sharing: false });
+      return;
+    }
+    try {
+      const display = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      screenTrack = display.getVideoTracks()[0];
+      const sender = videoSender();
+      if (sender) {
+        await sender.replaceTrack(screenTrack);
+      } else {
+        pc.addTrack(screenTrack, localStream);
+        await get()._renegotiate();
+        set({ isVideo: true, localVideo: true });
+      }
+      screenTrack.onended = () => {
+        if (get().sharing) get().toggleScreenShare();
+      };
+      set({ sharing: true });
+    } catch {
+      /* user cancelled the picker */
+    }
+  },
+
   _cleanup: () => {
     stopRingtone();
     // the caller logs the call to history (covers both parties)
@@ -159,6 +228,10 @@ export const useCallStore = create((set, get) => ({
       localStream.getTracks().forEach((t) => t.stop());
       localStream = null;
     }
+    if (screenTrack) {
+      screenTrack.stop();
+      screenTrack = null;
+    }
     pendingCandidates = [];
     pendingOffer = null;
     set({
@@ -167,6 +240,9 @@ export const useCallStore = create((set, get) => ({
       isVideo: false,
       muted: false,
       cameraOff: false,
+      sharing: false,
+      localVideo: false,
+      remoteVideo: false,
       remoteStream: null,
       localStream: null,
     });
@@ -175,7 +251,7 @@ export const useCallStore = create((set, get) => ({
   subscribeCall: () => {
     const s = sock();
     if (!s) return;
-    ["call:incoming", "call:answered", "call:ice", "call:end", "call:reject"].forEach((e) => s.off(e));
+    ["call:incoming", "call:answered", "call:ice", "call:end", "call:reject", "call:renegotiate", "call:renegotiate-answer"].forEach((e) => s.off(e));
 
     s.on("call:incoming", ({ from, fromName, fromPic, offer, video }) => {
       if (get().callState !== "idle") {
@@ -229,11 +305,32 @@ export const useCallStore = create((set, get) => ({
       toast("Call declined");
       get()._cleanup();
     });
+
+    // peer added/replaced a track mid-call (screen share / voice→video)
+    s.on("call:renegotiate", async ({ offer }) => {
+      if (!pc) return;
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        sock()?.emit("call:renegotiate-answer", { to: get().peer?.id, answer });
+      } catch {
+        /* ignore */
+      }
+    });
+    s.on("call:renegotiate-answer", async ({ answer }) => {
+      if (!pc) return;
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+      } catch {
+        /* ignore */
+      }
+    });
   },
 
   unsubscribeCall: () => {
     const s = sock();
     if (!s) return;
-    ["call:incoming", "call:answered", "call:ice", "call:end", "call:reject"].forEach((e) => s.off(e));
+    ["call:incoming", "call:answered", "call:ice", "call:end", "call:reject", "call:renegotiate", "call:renegotiate-answer"].forEach((e) => s.off(e));
   },
 }));
