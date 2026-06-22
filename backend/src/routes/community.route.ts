@@ -5,6 +5,7 @@ import {
   getMyCommunities,
   getCommunity,
   createCommunityGroup,
+  updateCommunityGroup,
   joinCommunity,
   leaveCommunity,
   joinCommunityGroup,
@@ -16,6 +17,7 @@ router.get("/", protectRoute, getMyCommunities);
 router.post("/", protectRoute, createCommunity);
 router.get("/:id", protectRoute, getCommunity);
 router.post("/:id/groups", protectRoute, createCommunityGroup);
+router.patch("/:id/groups/:groupId", protectRoute, updateCommunityGroup);
 router.post("/:id/join", protectRoute, joinCommunity);
 router.post("/:id/leave", protectRoute, leaveCommunity);
 router.post("/:id/groups/:groupId/join", protectRoute, joinCommunityGroup);

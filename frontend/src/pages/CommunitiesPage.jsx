@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Users, Megaphone, Hash, Plus, ArrowLeft, DoorOpen, ShieldCheck, Loader2 } from "lucide-react";
+import { Users, Megaphone, Plus, ArrowLeft, DoorOpen, ShieldCheck, Loader2, Compass, Pencil } from "lucide-react";
 import { useCommunityStore } from "../store/useCommunityStore";
 import { useChatStore } from "../store/useChatStore";
 import Avatar from "../components/Avatar";
@@ -9,7 +9,7 @@ import CreateCommunityModal from "../components/CreateCommunityModal";
 const CommunitiesPage = () => {
   const {
     communities, active, loading, getCommunities, openCommunity,
-    closeCommunity, leaveCommunity, createGroup, joinGroup,
+    closeCommunity, leaveCommunity, createGroup, joinGroup, editGroupDescription,
   } = useCommunityStore();
   const { setSelectedUser } = useChatStore();
   const navigate = useNavigate();
@@ -17,6 +17,8 @@ const CommunitiesPage = () => {
   const [showCreate, setShowCreate] = useState(false);
   const [newGroup, setNewGroup] = useState("");
   const [addingGroup, setAddingGroup] = useState(false);
+  const [editingGroupId, setEditingGroupId] = useState(null);
+  const [editDesc, setEditDesc] = useState("");
 
   useEffect(() => {
     getCommunities();
@@ -35,6 +37,85 @@ const CommunitiesPage = () => {
       setNewGroup("");
       setAddingGroup(false);
     }
+  };
+
+  const joinedGroups = active ? active.groups.filter((g) => g.isMember) : [];
+  const otherGroups = active ? active.groups.filter((g) => !g.isMember) : [];
+
+  const startEdit = (g) => {
+    setEditingGroupId(g._id);
+    setEditDesc(g.description || "");
+  };
+  const saveEdit = async () => {
+    const ok = await editGroupDescription(active.community._id, editingGroupId, editDesc.trim());
+    if (ok) setEditingGroupId(null);
+  };
+
+  // one richer group row — avatar, description/member-count, open vs join
+  // (community admins can edit the description inline)
+  const renderGroup = (g) => {
+    const editing = editingGroupId === g._id;
+    return (
+      <div key={g._id} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-base-200/60">
+        <Avatar group src={g.avatar} name={g.name} size="size-11" className="shrink-0" />
+        <div className="min-w-0 flex-1">
+          <div className="font-medium truncate">{g.name}</div>
+          {editing ? (
+            <div className="flex items-center gap-2 mt-1">
+              <input
+                autoFocus
+                className="input input-bordered input-xs flex-1"
+                placeholder="Group description"
+                value={editDesc}
+                onChange={(e) => setEditDesc(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") saveEdit();
+                  if (e.key === "Escape") setEditingGroupId(null);
+                }}
+              />
+              <button onClick={saveEdit} className="btn btn-primary btn-xs">Save</button>
+              <button onClick={() => setEditingGroupId(null)} className="btn btn-ghost btn-xs">Cancel</button>
+            </div>
+          ) : (
+            <>
+              {g.description && <div className="text-xs opacity-60 truncate">{g.description}</div>}
+              <div className="flex items-center gap-2 mt-0.5">
+                {g.memberPreview?.length > 0 && (
+                  <div className="flex -space-x-2">
+                    {g.memberPreview.map((m) => (
+                      <Avatar key={m._id} user={m} size="size-5" className="ring-2 ring-base-100" />
+                    ))}
+                  </div>
+                )}
+                <span className="text-xs opacity-60">
+                  {g.memberCount} member{g.memberCount > 1 ? "s" : ""}
+                </span>
+              </div>
+            </>
+          )}
+        </div>
+        {!editing && (
+          <div className="flex items-center gap-1 shrink-0">
+            {active.isAdmin && (
+              <button
+                onClick={() => startEdit(g)}
+                className="btn btn-ghost btn-xs btn-circle"
+                title="Edit description"
+              >
+                <Pencil className="size-3.5" />
+              </button>
+            )}
+            {g.isMember ? (
+              <button onClick={() => openChat(g)} className="btn btn-sm btn-ghost">Open</button>
+            ) : (
+              <button onClick={() => joinGroup(active.community._id, g._id)} className="btn btn-sm btn-primary">
+                Join
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -170,29 +251,34 @@ const CommunitiesPage = () => {
                 )}
 
                 {active.groups.length === 0 ? (
-                  <p className="text-sm opacity-60 py-4 text-center">No groups yet.</p>
+                  <p className="text-sm opacity-60 py-4 text-center">
+                    No groups yet.{active.isAdmin ? " Create the first one above." : ""}
+                  </p>
                 ) : (
-                  <div className="space-y-1.5">
-                    {active.groups.map((g) => (
-                      <div key={g._id} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-base-200/60">
-                        <span className="size-10 rounded-full bg-base-300/70 grid place-items-center shrink-0">
-                          <Hash className="size-4 opacity-70" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="font-medium truncate">{g.name}</div>
-                          <div className="text-xs opacity-60">
-                            {g.memberCount} member{g.memberCount > 1 ? "s" : ""}
-                          </div>
-                        </div>
-                        {g.isMember ? (
-                          <button onClick={() => openChat(g)} className="btn btn-sm btn-ghost">Open</button>
-                        ) : (
-                          <button onClick={() => joinGroup(active.community._id, g._id)} className="btn btn-sm btn-primary">
-                            Join
-                          </button>
-                        )}
+                  <div className="space-y-5">
+                    {/* groups you're in */}
+                    <div>
+                      <p className="text-[11px] font-semibold tracking-wide opacity-50 mb-1.5">
+                        YOUR GROUPS · {joinedGroups.length}
+                      </p>
+                      {joinedGroups.length === 0 ? (
+                        <p className="text-xs opacity-50 px-1 py-2">
+                          You haven't joined any groups here yet — pick one from Discover below.
+                        </p>
+                      ) : (
+                        <div className="space-y-1.5">{joinedGroups.map(renderGroup)}</div>
+                      )}
+                    </div>
+
+                    {/* groups available to join */}
+                    {otherGroups.length > 0 && (
+                      <div>
+                        <p className="text-[11px] font-semibold tracking-wide opacity-50 mb-1.5 flex items-center gap-1.5">
+                          <Compass className="size-3.5" /> DISCOVER · {otherGroups.length} not joined
+                        </p>
+                        <div className="space-y-1.5">{otherGroups.map(renderGroup)}</div>
                       </div>
-                    ))}
+                    )}
                   </div>
                 )}
               </div>

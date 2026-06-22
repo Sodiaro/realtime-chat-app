@@ -1040,6 +1040,22 @@ export const openapiSpec = {
         responses: { 201: ok("Created group", ref("Conversation")), 403: ok("Admins only"), 409: ok("Duplicate group name in this community") },
       },
     },
+    "/api/communities/{id}/groups/{groupId}": {
+      patch: {
+        tags: ["Communities"],
+        summary: "Edit a community group's description (admins only)",
+        security: auth,
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+          { name: "groupId", in: "path", required: true, schema: { type: "string" } },
+        ],
+        requestBody: {
+          required: true,
+          content: json({ type: "object", properties: { description: { type: "string", maxLength: 500 } } }),
+        },
+        responses: { 200: ok("Updated group", ref("Conversation")), 403: ok("Admins only") },
+      },
+    },
     "/api/communities/{id}/join": {
       post: {
         tags: ["Communities"],

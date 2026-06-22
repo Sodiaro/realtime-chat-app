@@ -2,6 +2,7 @@ import { RequestHandler } from "express";
 import mongoose, { Types } from "mongoose";
 import Community from "../models/community.model.js";
 import Conversation from "../models/conversation.model.js";
+import User from "../models/user.model.js";
 import { io, userRoom } from "../lib/socket.js";
 
 const MAX_GROUP_MEMBERS = 200;
@@ -102,6 +103,14 @@ export const getCommunity: RequestHandler = async (req, res, next) => {
       Conversation.find({ communityId: id, isAnnouncement: { $ne: true } }).lean(),
     ]);
 
+    // fetch avatars for the first few members of each group (one batched query)
+    const previewIds = new Set<string>();
+    for (const g of groups) for (const p of (g.participants || []).slice(0, 4)) previewIds.add(String(p));
+    const previewUsers = await User.find({ _id: { $in: [...previewIds] } })
+      .select("fullName profilePic")
+      .lean();
+    const userMap = new Map(previewUsers.map((u) => [String(u._id), u]));
+
     res.status(200).json({
       community,
       isAdmin: community.admins.map(String).includes(myId),
@@ -110,6 +119,10 @@ export const getCommunity: RequestHandler = async (req, res, next) => {
         ...g,
         memberCount: g.participants.length,
         isMember: g.participants.map(String).includes(myId),
+        memberPreview: (g.participants || [])
+          .slice(0, 4)
+          .map((p) => userMap.get(String(p)))
+          .filter(Boolean),
       })),
     });
   } catch (error) {
@@ -224,6 +237,37 @@ export const joinCommunityGroup: RequestHandler = async (req, res, next) => {
       group.participants.push(myId as unknown as Types.ObjectId);
       await group.save();
       io.to(userRoom(String(myId))).emit("conversationCreated", group);
+    }
+    res.status(200).json(group);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// community admins can edit a group's description (manage all associated groups)
+export const updateCommunityGroup: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const { id, groupId } = req.params;
+    const { description } = req.body;
+
+    const community = await Community.findById(id).lean();
+    if (!community) return void res.status(404).json({ message: "Community not found" });
+    if (!community.admins.map(String).includes(myId))
+      return void res.status(403).json({ message: "Admins only" });
+
+    const group = await Conversation.findOne({ _id: groupId, communityId: id, isAnnouncement: { $ne: true } });
+    if (!group) return void res.status(404).json({ message: "Group not found" });
+
+    if (description !== undefined) group.description = String(description).slice(0, 500);
+    await group.save();
+
+    // reflect the change live for anyone with the group open
+    const populated = await Conversation.findById(group._id).populate("participants", "-password");
+    if (populated) {
+      for (const p of populated.participants) {
+        io.to(userRoom(String((p as { _id?: unknown })._id ?? p))).emit("conversationUpdated", populated);
+      }
     }
     res.status(200).json(group);
   } catch (error) {

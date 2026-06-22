@@ -75,6 +75,18 @@ export const useCommunityStore = create((set, get) => ({
     }
   },
 
+  editGroupDescription: async (id, groupId, description) => {
+    try {
+      await axiosInstance.patch(`/communities/${id}/groups/${groupId}`, { description });
+      await get().openCommunity(id);
+      toast.success("Group updated");
+      return true;
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Failed to update group");
+      return false;
+    }
+  },
+
   joinGroup: async (id, groupId) => {
     try {
       const res = await axiosInstance.post(`/communities/${id}/groups/${groupId}/join`);
