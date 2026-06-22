@@ -3,7 +3,8 @@ import { useAuthStore } from "../store/useAuthStore";
 import AuthImagePattern from "../components/AuthImagePattern";
 import OtpForm from "../components/OtpForm";
 import { Link } from "react-router-dom";
-import { Eye, EyeOff, Loader2, Lock, AtSign, MessageSquare } from "lucide-react";
+import { Eye, EyeOff, Loader2, Lock, AtSign } from "lucide-react";
+import Logo from "../components/Logo";
 
 const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false);
@@ -27,9 +28,7 @@ const LoginPage = () => {
             {/* Logo */}
             <div className="text-center">
               <div className="flex flex-col items-center gap-2">
-                <div className="size-12 rounded-2xl bg-primary/15 flex items-center justify-center">
-                  <MessageSquare className="size-6 text-primary" />
-                </div>
+                <Logo className="size-12" />
                 <h1 className="text-2xl font-bold mt-2 tracking-tight">Welcome back</h1>
                 <p className="text-base-content/60">Sign in to your account</p>
               </div>

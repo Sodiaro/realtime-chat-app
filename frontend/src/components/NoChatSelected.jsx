@@ -1,9 +1,10 @@
-import { MessageSquare, Lock, Zap, Users } from "lucide-react";
+import { Lock, Zap, Users } from "lucide-react";
+import Logo from "./Logo";
 
 const FEATURES = [
-  { icon: Lock, label: "Private & secure" },
-  { icon: Zap, label: "Realtime delivery" },
-  { icon: Users, label: "Groups & calls" },
+  { icon: Lock, label: "Secure" },
+  { icon: Zap, label: "Realtime" },
+  { icon: Users, label: "Calls" },
 ];
 
 const NoChatSelected = () => {
@@ -11,16 +12,12 @@ const NoChatSelected = () => {
     <div className="w-full flex flex-1 flex-col items-center justify-center p-8 sm:p-16 bg-base-100/40">
       <div className="max-w-sm text-center space-y-5">
         <div className="flex justify-center">
-          <div className="size-16 rounded-2xl bg-primary/10 flex items-center justify-center ring-1 ring-primary/15">
-            <MessageSquare className="size-8 text-primary" />
-          </div>
+          <Logo className="size-16" />
         </div>
 
         <div className="space-y-1.5">
           <h2 className="text-xl font-bold tracking-tight">Welcome to DevChat</h2>
-          <p className="text-sm text-base-content/60">
-            Select a conversation from the sidebar, or search for someone to start a new chat.
-          </p>
+          <p className="text-sm text-base-content/60">Pick a chat to start messaging.</p>
         </div>
 
         <div className="flex items-center justify-center gap-2 pt-1">

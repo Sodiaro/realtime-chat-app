@@ -5,9 +5,10 @@ import { useChatStore } from "../store/useChatStore";
 import { useThemeStore } from "../store/useThemeStore";
 import { usePanelStore } from "../store/usePanelStore";
 import Avatar from "./Avatar";
+import Logo from "./Logo";
 import ConfirmModal from "./ui/ConfirmModal";
 import {
-  LogOut, MessageSquare, Settings, User, Shield, Star, Phone, Clock, UserRound, Users, Sun, Moon,
+  LogOut, Settings, User, Shield, Star, Phone, Clock, UserRound, Users, Sun, Moon,
 } from "lucide-react";
 
 // compact icon-only nav button that opens a slide-over panel
@@ -51,8 +52,8 @@ const Navbar = () => {
       <div className="w-full px-3 sm:px-5 h-14 flex items-center justify-between gap-2">
         {/* logo */}
         <Link to="/" className="flex items-center gap-2.5 shrink-0 hover:opacity-90 transition-opacity">
-          <div className="size-9 rounded-xl bg-primary/15 grid place-items-center relative">
-            <MessageSquare className="size-[18px] text-primary" />
+          <div className="relative">
+            <Logo className="size-9" />
             {totalUnread > 0 && (
               <span className="absolute -top-1.5 -right-1.5 badge badge-primary badge-sm border-2 border-base-100">
                 {totalUnread > 99 ? "99+" : totalUnread}

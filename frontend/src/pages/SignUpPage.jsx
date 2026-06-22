@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuthStore } from "../store/useAuthStore";
-import { Eye, EyeOff, Loader2, Lock, Mail, MessageSquare, User, AtSign } from "lucide-react";
+import { Eye, EyeOff, Loader2, Lock, Mail, User, AtSign } from "lucide-react";
+import Logo from "../components/Logo";
 import { Link } from "react-router-dom";
 
 import AuthImagePattern from "../components/AuthImagePattern";
@@ -68,9 +69,7 @@ const SignUpPage = () => {
             {/* LOGO */}
             <div className="text-center">
               <div className="flex flex-col items-center gap-2">
-                <div className="size-12 rounded-2xl bg-primary/15 flex items-center justify-center">
-                  <MessageSquare className="size-6 text-primary" />
-                </div>
+                <Logo className="size-12" />
                 <h1 className="text-2xl font-bold mt-2 tracking-tight">Create account</h1>
                 <p className="text-base-content/60">Get started with your free account</p>
               </div>

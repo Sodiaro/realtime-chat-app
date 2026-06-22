@@ -31,7 +31,7 @@ interface ServerToClientEvents {
   "call:reject": (p: { from: string }) => void;
   "call:renegotiate": (p: { from: string; offer: unknown }) => void; // mid-call track change (screen share / voice→video)
   "call:renegotiate-answer": (p: { from: string; answer: unknown }) => void;
-  // ---- group / multi-person calls (mesh) ----
+  // group / multi-person calls (mesh)
   "gcall:incoming": (p: { roomId: string; from: string; fromName?: string; fromPic?: string; video: boolean; title?: string; groupId?: string }) => void;
   "gcall:peers": (p: { roomId: string; peers: { userId: string; name?: string; pic?: string }[] }) => void;
   "gcall:peer-joined": (p: { roomId: string; userId: string; name?: string; pic?: string }) => void;
@@ -54,7 +54,7 @@ interface ClientToServerEvents {
   "call:reject": (p: { to: string }) => void;
   "call:renegotiate": (p: { to: string; offer: unknown }) => void;
   "call:renegotiate-answer": (p: { to: string; answer: unknown }) => void;
-  // ---- group / multi-person calls (mesh) ----
+  // group / multi-person calls (mesh)
   "gcall:invite": (p: { roomId: string; groupId?: string; to: string[]; video: boolean; title?: string; fromName?: string; fromPic?: string }) => void;
   "gcall:join": (p: { roomId: string; groupId?: string; name?: string; pic?: string }) => void;
   "gcall:offer": (p: { roomId: string; to: string; offer: unknown }) => void;
@@ -82,7 +82,7 @@ if (adapterClients) {
 
 const userRoom = (userId: string) => `user:${userId}`;
 
-// ---- group-call room state (in-memory; single-node) ----
+// group-call room state (in-memory; single-node)
 // roomId -> (userId -> { name, pic }); roomMeta tracks the group + who to notify
 // so members can join a group call after it has already started.
 type RoomMember = { name?: string; pic?: string };
@@ -227,7 +227,7 @@ io.on("connection", async (socket) => {
     io.to(userRoom(to)).emit("messagesDelivered", { by: userId, conversationId: String(conv._id) });
   });
 
-  // ---- WebRTC call signaling (relay only) ----
+  // WebRTC call signaling (relay only)
   socket.on("call:offer", ({ to, offer, video, fromName, fromPic }) => {
     if (typeof to !== "string") return;
     // ghost mode = do-not-disturb: auto-decline so the caller's UI cleans up
@@ -254,7 +254,7 @@ io.on("connection", async (socket) => {
     if (typeof to === "string") io.to(userRoom(to)).emit("call:renegotiate-answer", { from: userId, answer });
   });
 
-  // ---- group / multi-person call signaling (mesh) ----
+  // group / multi-person call signaling (mesh)
   // ring the invitees; remember who can join later (group calls)
   socket.on("gcall:invite", ({ roomId, groupId, to, video, title, fromName, fromPic }) => {
     if (typeof roomId !== "string" || !Array.isArray(to)) return;

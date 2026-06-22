@@ -15,9 +15,10 @@
     -webkit-text-size-adjust: 100%;
   }
 
-  /* tighter, more legible headings */
+  /* premium display font for headings; tighter tracking */
   h1, h2, h3, h4 {
-    letter-spacing: -0.011em;
+    font-family: "Sora", "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: -0.014em;
   }
 
   /* smooth, app-wide fade when switching light/dark */
