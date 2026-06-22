@@ -2,13 +2,9 @@ import { create } from "zustand";
 import toast from "react-hot-toast";
 import { useAuthStore } from "./useAuthStore";
 import { startRingtone, stopRingtone } from "../lib/ringtone";
+import { ICE_SERVERS } from "../lib/iceConfig";
 
-const ICE = {
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" },
-  ],
-};
+const ICE = { iceServers: ICE_SERVERS };
 
 // non-serialisable / imperative state lives outside zustand
 let localStream = null;
@@ -33,6 +29,7 @@ export const useGroupCallStore = create((set, get) => ({
   streamTick: 0, // bumped when a remote stream attaches/detaches → re-render tiles
   muted: false,
   cameraOff: false,
+  sharing: false, // screen-sharing
   activeGroupCalls: {}, // groupId -> { roomId, count } so members can join an ongoing call
 
   getRemoteStream: (userId) => remoteStreams.get(userId) || null,
@@ -188,7 +185,7 @@ export const useGroupCallStore = create((set, get) => ({
       localStream = null;
     }
     curRoom = null;
-    set((s) => ({ inCall: false, roomId: null, isVideo: false, title: "", participants: [], muted: false, cameraOff: false, streamTick: s.streamTick + 1 }));
+    set((s) => ({ inCall: false, roomId: null, isVideo: false, title: "", participants: [], muted: false, cameraOff: false, sharing: false, streamTick: s.streamTick + 1 }));
   },
 
   toggleMute: () => {
@@ -202,6 +199,33 @@ export const useGroupCallStore = create((set, get) => ({
     const off = !get().cameraOff;
     localStream.getVideoTracks().forEach((t) => (t.enabled = !off));
     set({ cameraOff: off });
+  },
+
+  // share/unshare the screen by swapping the outgoing video track on every peer
+  toggleScreenShare: async () => {
+    if (!localStream) return;
+    const replaceVideo = async (track) => {
+      for (const pc of pcs.values()) {
+        const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+        if (sender && track) await sender.replaceTrack(track);
+      }
+    };
+    try {
+      if (get().sharing) {
+        await replaceVideo(localStream.getVideoTracks()[0]); // back to camera
+        set({ sharing: false });
+      } else {
+        const display = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        const screenTrack = display.getVideoTracks()[0];
+        await replaceVideo(screenTrack);
+        screenTrack.onended = () => {
+          if (get().sharing) get().toggleScreenShare(); // stop when the OS picker ends it
+        };
+        set({ sharing: true });
+      }
+    } catch {
+      /* user cancelled the picker */
+    }
   },
 
   subscribeGroupCall: () => {

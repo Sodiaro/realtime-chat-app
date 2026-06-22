@@ -1,7 +1,8 @@
 import { useChatStore } from "../store/useChatStore";
 import { useChatBgStore, bgClass } from "../store/useChatBgStore";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Pin, Mic, ChevronDown, Loader2 } from "lucide-react";
+import { Pin, Mic, ChevronDown, Loader2, Phone } from "lucide-react";
+import { useGroupCallStore } from "../store/useGroupCallStore";
 
 import ChatHeader from "./ChatHeader";
 import MessageInput from "./MessageInput";
@@ -36,6 +37,7 @@ const ChatContainer = () => {
   } = useChatStore();
   const { authUser } = useAuthStore();
   const { bg } = useChatBgStore();
+  const { activeGroupCalls, inCall: inGroupCall, joinExisting } = useGroupCallStore();
 
   const scrollRef = useRef(null);
   const messageEndRef = useRef(null);
@@ -175,10 +177,25 @@ const ChatContainer = () => {
     );
   }
 
+  const groupCall = selectedUser?.isGroup && !inGroupCall ? activeGroupCalls[selectedUser._id] : null;
+
   return (
     <div className="flex-1 flex flex-col overflow-auto relative">
       <ChatHeader />
       <div ref={liveRef} aria-live="polite" aria-atomic="true" className="sr-only" />
+
+      {groupCall && (
+        <button
+          onClick={() => joinExisting({ roomId: groupCall.roomId, groupId: selectedUser._id, video: false, title: selectedUser.fullName })}
+          className="w-full flex items-center gap-2 px-4 py-2 bg-success/15 border-b border-success/25 text-sm text-left hover:bg-success/25 transition-colors"
+        >
+          <Phone className="size-4 text-success shrink-0" />
+          <span className="flex-1">
+            Group call in progress{groupCall.count ? ` · ${groupCall.count} in call` : ""}
+          </span>
+          <span className="font-medium text-success">Join</span>
+        </button>
+      )}
 
       {latestPinned && (
         <button

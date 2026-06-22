@@ -11,8 +11,10 @@ export interface ICommunity {
   description?: string;
   avatar?: string;
   admins: Types.ObjectId[];
+  moderators: Types.ObjectId[]; // can create/edit groups, but not manage roles
   members: Types.ObjectId[];
   announcementId: Types.ObjectId; // the announcement channel conversation
+  inviteCode?: string; // join-by-link code (absent = link disabled)
   nameKey?: string; // lowercased name for case-insensitive uniqueness
   createdAt: Date;
   updatedAt: Date;
@@ -24,8 +26,10 @@ const communitySchema = new Schema<ICommunity>(
     description: { type: String },
     avatar: { type: String },
     admins: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    moderators: [{ type: Schema.Types.ObjectId, ref: "User" }],
     members: [{ type: Schema.Types.ObjectId, ref: "User" }],
     announcementId: { type: Schema.Types.ObjectId, ref: "Conversation", required: true },
+    inviteCode: { type: String, unique: true, sparse: true },
     nameKey: { type: String },
   },
   { timestamps: true }

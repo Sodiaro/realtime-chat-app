@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Users, Megaphone, Plus, ArrowLeft, DoorOpen, ShieldCheck, Loader2, Compass, Pencil } from "lucide-react";
+import { Users, Megaphone, Plus, ArrowLeft, DoorOpen, ShieldCheck, Loader2, Compass, Pencil, Camera, Wrench, Link2, Copy, Trash2 } from "lucide-react";
 import { useCommunityStore } from "../store/useCommunityStore";
 import { useChatStore } from "../store/useChatStore";
+import { useAuthStore } from "../store/useAuthStore";
 import Avatar from "../components/Avatar";
 import CreateCommunityModal from "../components/CreateCommunityModal";
 
@@ -10,8 +11,10 @@ const CommunitiesPage = () => {
   const {
     communities, active, loading, getCommunities, openCommunity,
     closeCommunity, leaveCommunity, createGroup, joinGroup, editGroupDescription,
+    updateCommunity, setRole, createInvite, revokeInvite,
   } = useCommunityStore();
   const { setSelectedUser } = useChatStore();
+  const { authUser } = useAuthStore();
   const navigate = useNavigate();
 
   const [showCreate, setShowCreate] = useState(false);
@@ -19,6 +22,40 @@ const CommunitiesPage = () => {
   const [addingGroup, setAddingGroup] = useState(false);
   const [editingGroupId, setEditingGroupId] = useState(null);
   const [editDesc, setEditDesc] = useState("");
+  const [editName, setEditName] = useState(false);
+  const [cName, setCName] = useState("");
+  const [cDesc, setCDesc] = useState("");
+  const avatarRef = useRef(null);
+
+  const cid = active?.community?._id;
+  const memberList = active?.community?.members || [];
+  const roleOf = (uid) =>
+    (active?.community?.admins || []).map(String).includes(String(uid))
+      ? "admin"
+      : (active?.community?.moderators || []).map(String).includes(String(uid))
+        ? "moderator"
+        : "member";
+  const inviteUrl = (code) => `${window.location.origin}/communities/join/${code}`;
+
+  const onCommunityPhoto = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onloadend = () => updateCommunity(cid, { avatar: reader.result });
+    reader.readAsDataURL(f);
+  };
+  const openEdit = () => {
+    setCName(active.community.name);
+    setCDesc(active.community.description || "");
+    setEditName(true);
+  };
+  const saveCommunity = async () => {
+    const ok = await updateCommunity(cid, { name: cName.trim(), description: cDesc.trim() });
+    if (ok) setEditName(false);
+  };
+  const copyInvite = (code) => {
+    navigator.clipboard?.writeText(inviteUrl(code));
+  };
 
   useEffect(() => {
     getCommunities();
@@ -177,23 +214,54 @@ const CommunitiesPage = () => {
                 <button onClick={closeCommunity} className="btn btn-ghost btn-sm btn-circle lg:hidden -ml-1">
                   <ArrowLeft className="size-5" />
                 </button>
-                <Avatar group src={active.community.avatar} name={active.community.name} size="size-16" className="shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <h2 className="text-xl font-semibold flex items-center gap-2">
-                    {active.community.name}
-                    {active.isAdmin && (
-                      <span className="badge badge-primary badge-sm gap-1">
-                        <ShieldCheck className="size-3" /> Admin
-                      </span>
-                    )}
-                  </h2>
-                  {active.community.description && (
-                    <p className="text-sm text-base-content/70 mt-0.5">{active.community.description}</p>
+                <div className="relative shrink-0">
+                  <Avatar group src={active.community.avatar} name={active.community.name} size="size-16" />
+                  {active.isAdmin && (
+                    <>
+                      <button
+                        onClick={() => avatarRef.current?.click()}
+                        className="absolute -bottom-1 -right-1 btn btn-circle btn-xs btn-primary"
+                        title="Change photo"
+                      >
+                        <Camera className="size-3" />
+                      </button>
+                      <input ref={avatarRef} type="file" accept="image/*" className="hidden" onChange={onCommunityPhoto} />
+                    </>
                   )}
-                  <p className="text-xs opacity-60 mt-1">
-                    {(active.community.members?.length ?? 0)} member
-                    {(active.community.members?.length ?? 0) > 1 ? "s" : ""}
-                  </p>
+                </div>
+                <div className="min-w-0 flex-1">
+                  {editName ? (
+                    <div className="space-y-2">
+                      <input autoFocus className="input input-bordered input-sm w-full" value={cName} onChange={(e) => setCName(e.target.value)} placeholder="Community name" />
+                      <textarea className="textarea textarea-bordered textarea-sm w-full" rows={2} value={cDesc} onChange={(e) => setCDesc(e.target.value)} placeholder="Description" />
+                      <div className="flex gap-2">
+                        <button onClick={saveCommunity} disabled={!cName.trim()} className="btn btn-primary btn-xs">Save</button>
+                        <button onClick={() => setEditName(false)} className="btn btn-ghost btn-xs">Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <h2 className="text-xl font-semibold flex items-center gap-2 flex-wrap">
+                        {active.community.name}
+                        {active.isAdmin ? (
+                          <span className="badge badge-primary badge-sm gap-1"><ShieldCheck className="size-3" /> Admin</span>
+                        ) : active.isModerator ? (
+                          <span className="badge badge-sm gap-1"><Wrench className="size-3" /> Mod</span>
+                        ) : null}
+                        {active.isAdmin && (
+                          <button onClick={openEdit} className="btn btn-ghost btn-xs btn-circle" title="Edit community">
+                            <Pencil className="size-3.5" />
+                          </button>
+                        )}
+                      </h2>
+                      {active.community.description && (
+                        <p className="text-sm text-base-content/70 mt-0.5">{active.community.description}</p>
+                      )}
+                      <p className="text-xs opacity-60 mt-1">
+                        {memberList.length} member{memberList.length > 1 ? "s" : ""}
+                      </p>
+                    </>
+                  )}
                 </div>
                 <button
                   onClick={() => leaveCommunity(active.community._id)}
@@ -282,6 +350,67 @@ const CommunitiesPage = () => {
                   </div>
                 )}
               </div>
+
+              {/* members & roles (admins) */}
+              {active.isAdmin && (
+                <div>
+                  <p className="text-xs uppercase tracking-wide opacity-50 mb-2">Members &amp; roles</p>
+                  <div className="space-y-1.5">
+                    {memberList.map((m) => {
+                      const r = roleOf(m._id);
+                      return (
+                        <div key={m._id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-base-200/60">
+                          <Avatar user={m} size="size-9" />
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium truncate">
+                              {m.fullName}
+                              {String(m._id) === String(authUser?._id) ? " (You)" : ""}
+                            </div>
+                            <div className="text-xs opacity-60 capitalize">{r}</div>
+                          </div>
+                          <select
+                            className="select select-bordered select-xs"
+                            value={r}
+                            onChange={(e) => setRole(cid, m._id, e.target.value)}
+                          >
+                            <option value="admin">Admin</option>
+                            <option value="moderator">Moderator</option>
+                            <option value="member">Member</option>
+                          </select>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* invite link (admins) */}
+              {active.isAdmin && (
+                <div>
+                  <p className="text-xs uppercase tracking-wide opacity-50 mb-2">Invite link</p>
+                  {active.community.inviteCode ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        readOnly
+                        className="input input-bordered input-sm flex-1 text-xs"
+                        value={inviteUrl(active.community.inviteCode)}
+                        onFocus={(e) => e.target.select()}
+                      />
+                      <button onClick={() => copyInvite(active.community.inviteCode)} className="btn btn-sm btn-ghost gap-1">
+                        <Copy className="size-4" /> Copy
+                      </button>
+                      <button onClick={() => revokeInvite(cid)} className="btn btn-sm btn-ghost text-error" title="Disable link">
+                        <Trash2 className="size-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={() => createInvite(cid)} className="btn btn-sm btn-outline gap-1">
+                      <Link2 className="size-4" /> Create invite link
+                    </button>
+                  )}
+                  <p className="text-xs opacity-50 mt-1">Anyone with this link can join the community.</p>
+                </div>
+              )}
             </div>
           )}
         </div>

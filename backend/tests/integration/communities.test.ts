@@ -130,4 +130,78 @@ describe("communities", () => {
     const view = await member.agent.get(`/api/communities/${cid}`);
     expect(view.status).toBe(403);
   });
+
+  it("admins can edit a group's description; moderators can manage groups; members can't", async () => {
+    const owner = await makeUser("ed");
+    const mod = await makeUser("md");
+    const plain = await makeUser("pl");
+    const created = await owner.agent.post("/api/communities").send({ name: "Roles" });
+    const cid = created.body.community._id as string;
+    const g = await owner.agent.post(`/api/communities/${cid}/groups`).send({ name: "Alpha" });
+    const gid = g.body._id as string;
+    await mod.agent.post(`/api/communities/${cid}/join`);
+    await plain.agent.post(`/api/communities/${cid}/join`);
+
+    // admin edits the group description
+    const edit = await owner.agent.patch(`/api/communities/${cid}/groups/${gid}`).send({ description: "the A team" });
+    expect(edit.status).toBe(200);
+    expect(edit.body.description).toBe("the A team");
+
+    // a plain member cannot create or edit groups
+    expect((await plain.agent.post(`/api/communities/${cid}/groups`).send({ name: "Nope" })).status).toBe(403);
+    expect((await plain.agent.patch(`/api/communities/${cid}/groups/${gid}`).send({ description: "x" })).status).toBe(403);
+
+    // promote to moderator → can now create + edit groups
+    const promote = await owner.agent.post(`/api/communities/${cid}/role`).send({ userId: mod.id, role: "moderator" });
+    expect(promote.status).toBe(200);
+    expect((await mod.agent.post(`/api/communities/${cid}/groups`).send({ name: "Beta" })).status).toBe(201);
+    expect((await mod.agent.patch(`/api/communities/${cid}/groups/${gid}`).send({ description: "edited by mod" })).status).toBe(200);
+  });
+
+  it("won't demote the last admin", async () => {
+    const owner = await makeUser("la");
+    const created = await owner.agent.post("/api/communities").send({ name: "Solo" });
+    const cid = created.body.community._id as string;
+    const res = await owner.agent.post(`/api/communities/${cid}/role`).send({ userId: owner.id, role: "member" });
+    expect(res.status).toBe(400);
+  });
+
+  it("invite links let an outsider preview and join the community", async () => {
+    const owner = await makeUser("io");
+    const outsider = await makeUser("is");
+    const created = await owner.agent.post("/api/communities").send({ name: "Inviters" });
+    const cid = created.body.community._id as string;
+
+    const invite = await owner.agent.post(`/api/communities/${cid}/invite`);
+    expect(invite.status).toBe(200);
+    const code = invite.body.inviteCode as string;
+    expect(code).toBeTruthy();
+
+    const preview = await outsider.agent.get(`/api/communities/invite/${code}`);
+    expect(preview.body.name).toBe("Inviters");
+    expect(preview.body.isMember).toBe(false);
+
+    const join = await outsider.agent.post(`/api/communities/invite/${code}/join`);
+    expect(join.status).toBe(200);
+    const view = await outsider.agent.get(`/api/communities/${cid}`);
+    expect(view.status).toBe(200); // now a member
+
+    // revoking disables the link
+    await owner.agent.delete(`/api/communities/${cid}/invite`);
+    expect((await outsider.agent.get(`/api/communities/invite/${code}`)).status).toBe(404);
+  });
+
+  it("admins can rename the community (uniqueness enforced)", async () => {
+    const owner = await makeUser("rn");
+    const c1 = await owner.agent.post("/api/communities").send({ name: "First" });
+    await owner.agent.post("/api/communities").send({ name: "Second" });
+    const cid = c1.body.community._id as string;
+
+    const dup = await owner.agent.patch(`/api/communities/${cid}`).send({ name: "second" });
+    expect(dup.status).toBe(409);
+
+    const ok = await owner.agent.patch(`/api/communities/${cid}`).send({ name: "Renamed", description: "now with desc" });
+    expect(ok.status).toBe(200);
+    expect(ok.body.name).toBe("Renamed");
+  });
 });

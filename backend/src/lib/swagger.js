@@ -1022,6 +1022,24 @@ export const openapiSpec = {
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
         responses: { 200: ok("Community detail"), 403: ok("Join to view") },
       },
+      patch: {
+        tags: ["Communities"],
+        summary: "Edit community name / description / avatar (admins only)",
+        security: auth,
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: json({
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              description: { type: "string", maxLength: 500 },
+              avatar: { type: "string", description: "base64 data URL" },
+            },
+          }),
+        },
+        responses: { 200: ok("Updated community"), 403: ok("Admins only"), 409: ok("Duplicate name") },
+      },
     },
     "/api/communities/{id}/groups": {
       post: {
@@ -1084,6 +1102,57 @@ export const openapiSpec = {
           { name: "groupId", in: "path", required: true, schema: { type: "string" } },
         ],
         responses: { 200: ok("Joined group", ref("Conversation")), 403: ok("Join the community first") },
+      },
+    },
+    "/api/communities/{id}/role": {
+      post: {
+        tags: ["Communities"],
+        summary: "Set a member's role: admin / moderator / member (admins only)",
+        security: auth,
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: json({
+            type: "object",
+            required: ["userId", "role"],
+            properties: { userId: ID, role: { type: "string", enum: ["admin", "moderator", "member"] } },
+          }),
+        },
+        responses: { 200: ok("Updated roles"), 403: ok("Admins only"), 400: ok("Invalid role / last admin") },
+      },
+    },
+    "/api/communities/{id}/invite": {
+      post: {
+        tags: ["Communities"],
+        summary: "Create (or fetch) the community invite link (admins only)",
+        security: auth,
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: ok("Invite code", { type: "object", properties: { inviteCode: { type: "string" } } }), 403: ok("Admins only") },
+      },
+      delete: {
+        tags: ["Communities"],
+        summary: "Disable the community invite link (admins only)",
+        security: auth,
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: ok("Revoked"), 403: ok("Admins only") },
+      },
+    },
+    "/api/communities/invite/{code}": {
+      get: {
+        tags: ["Communities"],
+        summary: "Preview a community from an invite code",
+        security: auth,
+        parameters: [{ name: "code", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: ok("Community preview"), 404: ok("Invalid or expired invite") },
+      },
+    },
+    "/api/communities/invite/{code}/join": {
+      post: {
+        tags: ["Communities"],
+        summary: "Join a community via an invite code",
+        security: auth,
+        parameters: [{ name: "code", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: ok("Joined community"), 404: ok("Invalid or expired invite") },
       },
     },
     // ---------- Push ----------

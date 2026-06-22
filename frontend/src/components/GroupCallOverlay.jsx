@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff, Users } from "lucide-react";
+import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff, Users, MonitorUp } from "lucide-react";
 import { useGroupCallStore } from "../store/useGroupCallStore";
 import Avatar from "./Avatar";
 
@@ -34,8 +34,8 @@ const colsClass = (n) => (n <= 1 ? "grid-cols-1" : n <= 4 ? "grid-cols-2" : "gri
 
 const GroupCallOverlay = () => {
   const {
-    inCall, incoming, participants, muted, cameraOff, isVideo, title, streamTick,
-    getRemoteStream, getLocalStream, acceptIncoming, declineIncoming, leaveCall, toggleMute, toggleCamera,
+    inCall, incoming, participants, muted, cameraOff, isVideo, title, streamTick, sharing,
+    getRemoteStream, getLocalStream, acceptIncoming, declineIncoming, leaveCall, toggleMute, toggleCamera, toggleScreenShare,
   } = useGroupCallStore();
 
   // ringing invite (only when not already in a call)
@@ -94,6 +94,15 @@ const GroupCallOverlay = () => {
         {isVideo && (
           <button onClick={toggleCamera} className="btn btn-circle btn-lg" title="Toggle camera">
             {cameraOff ? <VideoOff /> : <Video />}
+          </button>
+        )}
+        {isVideo && (
+          <button
+            onClick={toggleScreenShare}
+            className={`btn btn-circle btn-lg ${sharing ? "btn-primary" : ""}`}
+            title={sharing ? "Stop sharing" : "Share screen"}
+          >
+            <MonitorUp />
           </button>
         )}
         <button onClick={leaveCall} className="btn btn-circle btn-lg btn-error" title="Leave">

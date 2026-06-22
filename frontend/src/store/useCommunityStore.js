@@ -75,6 +75,72 @@ export const useCommunityStore = create((set, get) => ({
     }
   },
 
+  updateCommunity: async (id, changes) => {
+    try {
+      await axiosInstance.patch(`/communities/${id}`, changes);
+      await get().openCommunity(id);
+      await get().getCommunities();
+      toast.success("Community updated");
+      return true;
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Failed to update community");
+      return false;
+    }
+  },
+
+  setRole: async (id, userId, role) => {
+    try {
+      await axiosInstance.post(`/communities/${id}/role`, { userId, role });
+      await get().openCommunity(id);
+      toast.success("Role updated");
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Failed to update role");
+    }
+  },
+
+  createInvite: async (id) => {
+    try {
+      const res = await axiosInstance.post(`/communities/${id}/invite`);
+      await get().openCommunity(id);
+      return res.data.inviteCode;
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Failed to create invite");
+      return null;
+    }
+  },
+
+  revokeInvite: async (id) => {
+    try {
+      await axiosInstance.delete(`/communities/${id}/invite`);
+      await get().openCommunity(id);
+      toast.success("Invite link disabled");
+      return true;
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Failed to revoke invite");
+      return false;
+    }
+  },
+
+  previewInvite: async (code) => {
+    try {
+      const res = await axiosInstance.get(`/communities/invite/${code}`);
+      return res.data;
+    } catch {
+      return null;
+    }
+  },
+
+  joinByInvite: async (code) => {
+    try {
+      const res = await axiosInstance.post(`/communities/invite/${code}/join`);
+      await get().getCommunities();
+      return res.data._id;
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Invalid or expired invite");
+      return null;
+    }
+  },
+
   editGroupDescription: async (id, groupId, description) => {
     try {
       await axiosInstance.patch(`/communities/${id}/groups/${groupId}`, { description });

@@ -9,6 +9,12 @@ const MAX_GROUP_MEMBERS = 200;
 
 const newKey = (prefix: string) => `${prefix}:${new mongoose.Types.ObjectId().toString()}`;
 
+// admins manage roles + everything; moderators manage groups; members participate
+type RoleDoc = { admins: Types.ObjectId[]; moderators?: Types.ObjectId[] };
+const isAdminOf = (c: RoleDoc, id: string) => c.admins.map(String).includes(id);
+const canManageGroups = (c: RoleDoc, id: string) =>
+  isAdminOf(c, id) || (c.moderators || []).map(String).includes(id);
+
 // case-insensitive exact-name matcher (escaped so names with regex chars are safe)
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const nameRegex = (name: string) => new RegExp(`^${esc(name.trim())}$`, "i");
@@ -114,6 +120,7 @@ export const getCommunity: RequestHandler = async (req, res, next) => {
     res.status(200).json({
       community,
       isAdmin: community.admins.map(String).includes(myId),
+      isModerator: (community.moderators || []).map(String).includes(myId),
       announcement,
       groups: groups.map((g) => ({
         ...g,
@@ -139,8 +146,8 @@ export const createCommunityGroup: RequestHandler = async (req, res, next) => {
 
     const community = await Community.findById(id);
     if (!community) return void res.status(404).json({ message: "Community not found" });
-    if (!community.admins.map(String).includes(String(myId)))
-      return void res.status(403).json({ message: "Admins only" });
+    if (!canManageGroups(community, String(myId)))
+      return void res.status(403).json({ message: "Admins or moderators only" });
     if (!name || !String(name).trim())
       return void res.status(400).json({ message: "Group name is required" });
     const cleanName = String(name).trim();
@@ -253,8 +260,8 @@ export const updateCommunityGroup: RequestHandler = async (req, res, next) => {
 
     const community = await Community.findById(id).lean();
     if (!community) return void res.status(404).json({ message: "Community not found" });
-    if (!community.admins.map(String).includes(myId))
-      return void res.status(403).json({ message: "Admins only" });
+    if (!canManageGroups(community, myId))
+      return void res.status(403).json({ message: "Admins or moderators only" });
 
     const group = await Conversation.findOne({ _id: groupId, communityId: id, isAnnouncement: { $ne: true } });
     if (!group) return void res.status(404).json({ message: "Group not found" });
@@ -270,6 +277,146 @@ export const updateCommunityGroup: RequestHandler = async (req, res, next) => {
       }
     }
     res.status(200).json(group);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// edit the community itself — name (unique), description, avatar (admins only)
+export const updateCommunity: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const { id } = req.params;
+    const { name, description, avatar } = req.body;
+
+    const community = await Community.findById(id);
+    if (!community) return void res.status(404).json({ message: "Community not found" });
+    if (!isAdminOf(community, myId)) return void res.status(403).json({ message: "Admins only" });
+
+    if (name !== undefined) {
+      const cleanName = String(name).trim();
+      if (!cleanName) return void res.status(400).json({ message: "Name can't be empty" });
+      if (cleanName.toLowerCase() !== (community.name || "").toLowerCase()) {
+        const dupe = await Community.findOne({ name: nameRegex(cleanName) }).lean();
+        if (dupe && String(dupe._id) !== id)
+          return void res.status(409).json({ message: "A community with that name already exists" });
+      }
+      community.name = cleanName;
+      community.nameKey = cleanName.toLowerCase();
+    }
+    if (description !== undefined) community.description = String(description).slice(0, 500);
+    if (avatar) {
+      const { default: cloudinary } = await import("../lib/cloudinary.js");
+      community.avatar = (await cloudinary.uploader.upload(avatar)).secure_url;
+    }
+    await community.save();
+    res.status(200).json(community);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// promote/demote a member to admin / moderator / member (admins only)
+export const setCommunityRole: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const { id } = req.params;
+    const { userId, role } = req.body;
+    if (!["admin", "moderator", "member"].includes(role))
+      return void res.status(400).json({ message: "Invalid role" });
+
+    const community = await Community.findById(id);
+    if (!community) return void res.status(404).json({ message: "Community not found" });
+    if (!isAdminOf(community, myId)) return void res.status(403).json({ message: "Admins only" });
+    if (!community.members.map(String).includes(String(userId)))
+      return void res.status(400).json({ message: "Not a member of this community" });
+
+    const target = String(userId);
+    const admins = community.admins.map(String).filter((a) => a !== target);
+    const mods = (community.moderators || []).map(String).filter((m) => m !== target);
+    if (role === "admin") admins.push(target);
+    if (role === "moderator") mods.push(target);
+    // never leave a community with zero admins
+    if (admins.length === 0)
+      return void res.status(400).json({ message: "A community needs at least one admin" });
+
+    community.admins = admins as unknown as Types.ObjectId[];
+    community.moderators = mods as unknown as Types.ObjectId[];
+    await community.save();
+    res.status(200).json({ admins: community.admins, moderators: community.moderators });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ---- community invite links ----
+export const createCommunityInvite: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const { id } = req.params;
+    const community = await Community.findById(id);
+    if (!community) return void res.status(404).json({ message: "Community not found" });
+    if (!isAdminOf(community, myId)) return void res.status(403).json({ message: "Admins only" });
+
+    if (!community.inviteCode) {
+      community.inviteCode = new mongoose.Types.ObjectId().toString();
+      await community.save();
+    }
+    res.status(200).json({ inviteCode: community.inviteCode });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const revokeCommunityInvite: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const { id } = req.params;
+    const community = await Community.findById(id);
+    if (!community) return void res.status(404).json({ message: "Community not found" });
+    if (!isAdminOf(community, myId)) return void res.status(403).json({ message: "Admins only" });
+    community.inviteCode = undefined;
+    await community.save();
+    res.status(200).json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const previewCommunityInvite: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const { code } = req.params;
+    const community = await Community.findOne({ inviteCode: code }).lean();
+    if (!community) return void res.status(404).json({ message: "Invalid or expired invite" });
+    res.status(200).json({
+      _id: community._id,
+      name: community.name,
+      avatar: community.avatar,
+      description: community.description,
+      memberCount: community.members.length,
+      isMember: community.members.map(String).includes(myId),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const joinCommunityByInvite: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = req.user!._id;
+    const { code } = req.params;
+    const community = await Community.findOne({ inviteCode: code });
+    if (!community) return void res.status(404).json({ message: "Invalid or expired invite" });
+
+    if (!community.members.map(String).includes(String(myId))) {
+      community.members.push(myId);
+      await community.save();
+      await Conversation.updateOne({ _id: community.announcementId }, { $addToSet: { participants: myId } });
+      const ann = await Conversation.findById(community.announcementId);
+      if (ann) io.to(userRoom(String(myId))).emit("conversationCreated", ann);
+    }
+    res.status(200).json({ _id: community._id });
   } catch (error) {
     next(error);
   }

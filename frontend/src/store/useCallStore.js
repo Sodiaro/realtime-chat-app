@@ -3,13 +3,9 @@ import toast from "react-hot-toast";
 import { useAuthStore } from "./useAuthStore";
 import { axiosInstance } from "../lib/axios";
 import { startRingtone, stopRingtone } from "../lib/ringtone";
+import { ICE_SERVERS } from "../lib/iceConfig";
 
-const ICE = {
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" },
-  ],
-};
+const ICE = { iceServers: ICE_SERVERS };
 
 // kept outside zustand state (non-serialisable / imperative)
 let pc = null;
