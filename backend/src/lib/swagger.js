@@ -940,6 +940,25 @@ export const openapiSpec = {
         responses: { 201: ok("Logged", ref("Call")) },
       },
     },
+    "/api/calls/group": {
+      post: {
+        tags: ["Calls"],
+        summary: "Log a group call into the group timeline + push offline members",
+        security: auth,
+        requestBody: {
+          required: true,
+          content: json({
+            type: "object",
+            required: ["conversationId", "type"],
+            properties: {
+              conversationId: { type: "string" },
+              type: { type: "string", enum: ["audio", "video"] },
+            },
+          }),
+        },
+        responses: { 201: ok("Logged group call", ref("Message")), 403: ok("Not a participant") },
+      },
+    },
     // ---------- Status / Stories ----------
     "/api/status": {
       get: {
@@ -1012,6 +1031,28 @@ export const openapiSpec = {
           }),
         },
         responses: { 201: ok("Created community + announcement channel"), 409: ok("Name already taken") },
+      },
+    },
+    "/api/communities/discover": {
+      get: {
+        tags: ["Communities"],
+        summary: "Browse communities you haven't joined (optional ?q= name search)",
+        security: auth,
+        parameters: [{ name: "q", in: "query", required: false, schema: { type: "string" } }],
+        responses: { 200: ok("Discoverable communities") },
+      },
+    },
+    "/api/communities/{id}/members/{userId}/remove": {
+      post: {
+        tags: ["Communities"],
+        summary: "Remove a member (optionally ban from rejoining) — admins only",
+        security: auth,
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+          { name: "userId", in: "path", required: true, schema: { type: "string" } },
+        ],
+        requestBody: { content: json({ type: "object", properties: { ban: { type: "boolean" } } }) },
+        responses: { 200: ok("Removed"), 403: ok("Admins only"), 400: ok("Last admin / yourself") },
       },
     },
     "/api/communities/{id}": {

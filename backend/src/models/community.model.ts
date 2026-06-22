@@ -13,6 +13,7 @@ export interface ICommunity {
   admins: Types.ObjectId[];
   moderators: Types.ObjectId[]; // can create/edit groups, but not manage roles
   members: Types.ObjectId[];
+  banned: Types.ObjectId[]; // removed + barred from rejoining
   announcementId: Types.ObjectId; // the announcement channel conversation
   inviteCode?: string; // join-by-link code (absent = link disabled)
   nameKey?: string; // lowercased name for case-insensitive uniqueness
@@ -28,6 +29,7 @@ const communitySchema = new Schema<ICommunity>(
     admins: [{ type: Schema.Types.ObjectId, ref: "User" }],
     moderators: [{ type: Schema.Types.ObjectId, ref: "User" }],
     members: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    banned: [{ type: Schema.Types.ObjectId, ref: "User" }],
     announcementId: { type: Schema.Types.ObjectId, ref: "Conversation", required: true },
     inviteCode: { type: String, unique: true, sparse: true },
     nameKey: { type: String },

@@ -75,6 +75,25 @@ export const useCommunityStore = create((set, get) => ({
     }
   },
 
+  discover: async (q = "") => {
+    try {
+      const res = await axiosInstance.get("/communities/discover", { params: q ? { q } : {} });
+      return res.data;
+    } catch {
+      return [];
+    }
+  },
+
+  removeMember: async (id, userId, ban = false) => {
+    try {
+      await axiosInstance.post(`/communities/${id}/members/${userId}/remove`, { ban });
+      await get().openCommunity(id);
+      toast.success(ban ? "Member banned" : "Member removed");
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Failed to remove member");
+    }
+  },
+
   updateCommunity: async (id, changes) => {
     try {
       await axiosInstance.patch(`/communities/${id}`, changes);

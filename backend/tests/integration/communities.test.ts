@@ -191,6 +191,38 @@ describe("communities", () => {
     expect((await outsider.agent.get(`/api/communities/invite/${code}`)).status).toBe(404);
   });
 
+  it("discovery lists communities you haven't joined", async () => {
+    const owner = await makeUser("dvo");
+    const outsider = await makeUser("dvx");
+    const created = await owner.agent.post("/api/communities").send({ name: "Discoverable Org" });
+    const cid = created.body.community._id as string;
+
+    // outsider can find it
+    const found = await outsider.agent.get("/api/communities/discover").query({ q: "Discoverable" });
+    expect(found.status).toBe(200);
+    expect(found.body.find((c: { _id: string }) => c._id === cid)).toBeTruthy();
+
+    // the owner (already a member) does NOT see it in discovery
+    const ownerView = await owner.agent.get("/api/communities/discover").query({ q: "Discoverable" });
+    expect(ownerView.body.find((c: { _id: string }) => c._id === cid)).toBeUndefined();
+  });
+
+  it("admins can remove + ban a member, blocking rejoin", async () => {
+    const owner = await makeUser("rmo");
+    const member = await makeUser("rmm");
+    const created = await owner.agent.post("/api/communities").send({ name: "Banhammer" });
+    const cid = created.body.community._id as string;
+    await member.agent.post(`/api/communities/${cid}/join`);
+
+    const removed = await owner.agent.post(`/api/communities/${cid}/members/${member.id}/remove`).send({ ban: true });
+    expect(removed.status).toBe(200);
+
+    // no longer a member
+    expect((await member.agent.get(`/api/communities/${cid}`)).status).toBe(403);
+    // and banned from rejoining
+    expect((await member.agent.post(`/api/communities/${cid}/join`)).status).toBe(403);
+  });
+
   it("admins can rename the community (uniqueness enforced)", async () => {
     const owner = await makeUser("rn");
     const c1 = await owner.agent.post("/api/communities").send({ name: "First" });

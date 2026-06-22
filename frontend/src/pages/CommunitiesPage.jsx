@@ -1,23 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Users, Megaphone, Plus, ArrowLeft, DoorOpen, ShieldCheck, Loader2, Compass, Pencil, Camera, Wrench, Link2, Copy, Trash2 } from "lucide-react";
+import { Users, Megaphone, Plus, ArrowLeft, DoorOpen, ShieldCheck, Loader2, Compass, Pencil, Camera, Wrench, Link2, Copy, Trash2, UserMinus, Ban } from "lucide-react";
 import { useCommunityStore } from "../store/useCommunityStore";
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
 import Avatar from "../components/Avatar";
 import CreateCommunityModal from "../components/CreateCommunityModal";
+import DiscoverCommunitiesModal from "../components/DiscoverCommunitiesModal";
 
 const CommunitiesPage = () => {
   const {
     communities, active, loading, getCommunities, openCommunity,
     closeCommunity, leaveCommunity, createGroup, joinGroup, editGroupDescription,
-    updateCommunity, setRole, createInvite, revokeInvite,
+    updateCommunity, setRole, createInvite, revokeInvite, removeMember,
   } = useCommunityStore();
   const { setSelectedUser } = useChatStore();
   const { authUser } = useAuthStore();
   const navigate = useNavigate();
 
   const [showCreate, setShowCreate] = useState(false);
+  const [showDiscover, setShowDiscover] = useState(false);
   const [newGroup, setNewGroup] = useState("");
   const [addingGroup, setAddingGroup] = useState(false);
   const [editingGroupId, setEditingGroupId] = useState(null);
@@ -164,9 +166,14 @@ const CommunitiesPage = () => {
       <div className="lg:grid lg:grid-cols-[300px_1fr] lg:gap-6">
         {/* list */}
         <div className={`${active ? "hidden lg:block" : ""} space-y-2`}>
-          <button onClick={() => setShowCreate(true)} className="btn btn-primary btn-sm w-full gap-2">
-            <Plus className="size-4" /> New community
-          </button>
+          <div className="flex gap-2">
+            <button onClick={() => setShowCreate(true)} className="btn btn-primary btn-sm flex-1 gap-2">
+              <Plus className="size-4" /> New
+            </button>
+            <button onClick={() => setShowDiscover(true)} className="btn btn-outline btn-sm flex-1 gap-2">
+              <Compass className="size-4" /> Discover
+            </button>
+          </div>
           {communities.length === 0 ? (
             <p className="text-sm opacity-60 text-center py-8">
               You're not in any communities yet. Create one to get started.
@@ -377,6 +384,24 @@ const CommunitiesPage = () => {
                             <option value="moderator">Moderator</option>
                             <option value="member">Member</option>
                           </select>
+                          {String(m._id) !== String(authUser?._id) && (
+                            <>
+                              <button
+                                onClick={() => removeMember(cid, m._id, false)}
+                                className="btn btn-ghost btn-xs btn-circle"
+                                title="Remove from community"
+                              >
+                                <UserMinus className="size-4" />
+                              </button>
+                              <button
+                                onClick={() => removeMember(cid, m._id, true)}
+                                className="btn btn-ghost btn-xs btn-circle text-error"
+                                title="Remove & ban"
+                              >
+                                <Ban className="size-4" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       );
                     })}
@@ -418,6 +443,9 @@ const CommunitiesPage = () => {
 
       {showCreate && (
         <CreateCommunityModal onClose={() => setShowCreate(false)} onCreated={(id) => openCommunity(id)} />
+      )}
+      {showDiscover && (
+        <DiscoverCommunitiesModal onClose={() => setShowDiscover(false)} onJoined={(id) => openCommunity(id)} />
       )}
     </div>
   );

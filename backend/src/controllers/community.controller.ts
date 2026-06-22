@@ -192,6 +192,8 @@ export const joinCommunity: RequestHandler = async (req, res, next) => {
     const { id } = req.params;
     const community = await Community.findById(id);
     if (!community) return void res.status(404).json({ message: "Community not found" });
+    if ((community.banned || []).map(String).includes(String(myId)))
+      return void res.status(403).json({ message: "You can't join this community" });
 
     if (!community.members.map(String).includes(String(myId))) {
       community.members.push(myId);
@@ -408,6 +410,8 @@ export const joinCommunityByInvite: RequestHandler = async (req, res, next) => {
     const { code } = req.params;
     const community = await Community.findOne({ inviteCode: code });
     if (!community) return void res.status(404).json({ message: "Invalid or expired invite" });
+    if ((community.banned || []).map(String).includes(String(myId)))
+      return void res.status(403).json({ message: "You can't join this community" });
 
     if (!community.members.map(String).includes(String(myId))) {
       community.members.push(myId);
@@ -417,6 +421,67 @@ export const joinCommunityByInvite: RequestHandler = async (req, res, next) => {
       if (ann) io.to(userRoom(String(myId))).emit("conversationCreated", ann);
     }
     res.status(200).json({ _id: community._id });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// browse communities I'm not in yet (optional ?q= name search), newest first
+export const discoverCommunities: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const q = String(req.query.q || "").trim();
+    const filter: Record<string, unknown> = { members: { $ne: myId }, banned: { $ne: myId } };
+    if (q) filter.name = new RegExp(esc(q.slice(0, 40)), "i"); // contains-match for search
+
+    const communities = await Community.find(filter).sort({ updatedAt: -1 }).limit(30).lean();
+    const ids = communities.map((c) => c._id);
+    const counts = await Conversation.aggregate([
+      { $match: { communityId: { $in: ids }, isAnnouncement: { $ne: true } } },
+      { $group: { _id: "$communityId", n: { $sum: 1 } } },
+    ]);
+    const groupCount = new Map(counts.map((c) => [String(c._id), c.n as number]));
+
+    res.status(200).json(
+      communities.map((c) => ({
+        _id: c._id,
+        name: c.name,
+        avatar: c.avatar,
+        description: c.description,
+        memberCount: c.members.length,
+        groupCount: groupCount.get(String(c._id)) || 0,
+      }))
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+// remove a member (optionally ban from rejoining) — admins only
+export const removeCommunityMember: RequestHandler = async (req, res, next) => {
+  try {
+    const myId = String(req.user!._id);
+    const { id, userId } = req.params;
+    const ban = req.body?.ban === true || req.query.ban === "true";
+
+    const community = await Community.findById(id);
+    if (!community) return void res.status(404).json({ message: "Community not found" });
+    if (!isAdminOf(community, myId)) return void res.status(403).json({ message: "Admins only" });
+    if (String(userId) === myId) return void res.status(400).json({ message: "Use leave instead" });
+
+    const target = String(userId);
+    community.admins = community.admins.filter((a) => String(a) !== target);
+    community.moderators = (community.moderators || []).filter((m) => String(m) !== target);
+    community.members = community.members.filter((m) => String(m) !== target);
+    if (community.admins.length === 0)
+      return void res.status(400).json({ message: "A community needs at least one admin" });
+    if (ban && !(community.banned || []).map(String).includes(target))
+      community.banned.push(target as unknown as Types.ObjectId);
+    await community.save();
+
+    // drop them from every conversation in the community
+    await Conversation.updateMany({ communityId: id }, { $pull: { participants: target } });
+    res.status(200).json({ ok: true, banned: ban });
   } catch (error) {
     next(error);
   }
