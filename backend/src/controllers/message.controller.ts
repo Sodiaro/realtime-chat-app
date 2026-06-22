@@ -138,6 +138,16 @@ function redactViewOnce(msg: Record<string, unknown>, myId: string): Record<stri
   };
 }
 
+// anti-delete: ghost-mode viewers keep a deleted message's original (flagged so
+// the UI offers "view original"); everyone else never receives the original.
+function applyAntiDelete(msg: Record<string, unknown>, iAmGhost: boolean): Record<string, unknown> {
+  if (!msg.deletedAt || !msg.original) return msg;
+  if (iAmGhost) return { ...msg, antiDelete: true };
+  const { original, ...rest } = msg;
+  void original;
+  return rest;
+}
+
 // hide a user's last-seen / profile photo based on their privacy settings.
 // `isContact` is true when the viewer shares a DM with them.
 type Vis = "everyone" | "contacts" | "nobody";
@@ -152,9 +162,9 @@ const visibleTo = (setting: Vis | undefined, isContact: boolean) =>
 
 function applyPrivacy<T extends PrivacyView>(u: T, isContact: boolean): T {
   const out: T = { ...u };
-  // ghost mode always hides last-seen (and ghostMode itself stays visible as a badge)
+  // ghost mode always hides last-seen + profile photo (ghostMode itself stays visible as a badge)
   if (out.ghostMode || !visibleTo(out.privacy?.lastSeen, isContact)) delete (out as PrivacyView).lastSeen;
-  if (!visibleTo(out.privacy?.profilePhoto, isContact)) (out as PrivacyView).profilePic = "";
+  if (out.ghostMode || !visibleTo(out.privacy?.profilePhoto, isContact)) (out as PrivacyView).profilePic = "";
   delete (out as PrivacyView).privacy;
   return out;
 }
@@ -260,17 +270,20 @@ export const getMessages: RequestHandler = async (req, res, next) => {
     }
 
     // query newest-first for the cursor, hand back oldest→newest for the UI
-    const page = await Message.find(query)
+    const iAmGhost = Boolean(req.user!.ghostMode);
+    let q = Message.find(query)
       .sort({ createdAt: -1 })
       .limit(limit)
-      .populate("replyTo", "text senderId image deletedAt")
-      .lean();
+      .populate("replyTo", "text senderId image deletedAt");
+    if (iAmGhost) q = q.select("+original"); // anti-delete recovery for ghost viewers
+    const page = await q.lean();
 
     const ordered = page.reverse();
     const nextCursor = page.length === limit ? ordered[0]?.createdAt : null;
     const messages = ordered
       .filter((m) => !m.ghostDeleted)
-      .map((m) => redactViewOnce(m as unknown as Record<string, unknown>, String(myId)));
+      .map((m) => redactViewOnce(m as unknown as Record<string, unknown>, String(myId)))
+      .map((m) => applyAntiDelete(m, iAmGhost));
 
     // opening a chat clears my unread for it
     await Conversation.updateOne(
@@ -432,6 +445,31 @@ async function emitMessageUpdate(message: IMessage) {
   for (const p of participants) io.to(userRoom(p)).emit("messageUpdated", message);
 }
 
+// delete is per-viewer: ghost-mode participants keep the original ("anti-delete"),
+// everyone else gets a redacted tombstone with no original content.
+async function emitMessageDeleted(message: IMessage) {
+  const conv = await Conversation.findById(message.conversationId).select("participants").lean();
+  const participants = conv?.participants?.map(String) ?? [
+    String(message.senderId),
+    String(message.receiverId),
+  ].filter(Boolean);
+  const doc = (message as unknown as { toObject: () => Record<string, unknown> }).toObject();
+
+  // a ghost user's own delete vanishes for everyone (no anti-delete)
+  if (message.ghostDeleted) {
+    for (const p of participants) io.to(userRoom(p)).emit("messageUpdated", doc as unknown as IMessage);
+    return;
+  }
+
+  const ghosts = await User.find({ _id: { $in: participants }, ghostMode: true }).select("_id").lean();
+  const ghostSet = new Set(ghosts.map((g) => String(g._id)));
+  const redacted = { ...doc, original: undefined };
+  const withOriginal = { ...doc, antiDelete: true };
+  for (const p of participants) {
+    io.to(userRoom(p)).emit("messageUpdated", (ghostSet.has(p) ? withOriginal : redacted) as unknown as IMessage);
+  }
+}
+
 export const updateMessage: RequestHandler = async (req, res, next) => {
   try {
     const myId = String(req.user!._id);
@@ -492,8 +530,10 @@ export const deleteMessage: RequestHandler = async (req, res, next) => {
       return;
     }
 
-    // soft delete: keep the row so history stays consistent
+    // soft delete: keep the row so history stays consistent, and stash the
+    // original so ghost-mode viewers can recover it ("anti-delete")
     message.deletedAt = new Date();
+    message.original = { text: message.text, image: message.image };
     message.text = undefined;
     message.image = undefined;
     message.reactions = [];
@@ -501,8 +541,11 @@ export const deleteMessage: RequestHandler = async (req, res, next) => {
     if (req.user!.ghostMode) message.ghostDeleted = true;
     await message.save();
 
-    await emitMessageUpdate(message);
-    res.status(200).json(message);
+    await emitMessageDeleted(message);
+    // don't echo the original back to the deleter's own response
+    const out = message.toObject();
+    delete (out as { original?: unknown }).original;
+    res.status(200).json(out);
   } catch (error) {
     next(error);
   }
@@ -930,17 +973,20 @@ export const getConversationMessages: RequestHandler = async (req, res, next) =>
     const query: Record<string, unknown> = { conversationId, ...notExpired() };
     if (req.query.cursor) query.createdAt = { $lt: new Date(String(req.query.cursor)) };
 
-    const page = await Message.find(query)
+    const iAmGhost = Boolean(req.user!.ghostMode);
+    let q = Message.find(query)
       .sort({ createdAt: -1 })
       .limit(limit)
-      .populate("replyTo", "text senderId image deletedAt")
-      .lean();
+      .populate("replyTo", "text senderId image deletedAt");
+    if (iAmGhost) q = q.select("+original"); // anti-delete recovery for ghost viewers
+    const page = await q.lean();
 
     const ordered = page.reverse();
     const nextCursor = page.length === limit ? ordered[0]?.createdAt : null;
     const messages = ordered
       .filter((m) => !m.ghostDeleted)
-      .map((m) => redactViewOnce(m as unknown as Record<string, unknown>, String(myId)));
+      .map((m) => redactViewOnce(m as unknown as Record<string, unknown>, String(myId)))
+      .map((m) => applyAntiDelete(m, iAmGhost));
 
     await Conversation.updateOne(
       { _id: conversation._id },

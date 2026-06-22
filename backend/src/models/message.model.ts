@@ -76,6 +76,7 @@ export interface IMessage {
   readBy: Types.ObjectId[]; // group read receipts: who has read this message
   editedAt?: Date;
   deletedAt?: Date;
+  original?: { text?: string; image?: string }; // kept on delete so ghost-mode viewers can recover it
   pinnedAt?: Date;
   replyTo?: Types.ObjectId;
   forwardedFrom?: Types.ObjectId;
@@ -174,6 +175,10 @@ const messageSchema = new Schema<IMessage>(
     },
     deletedAt: {
       type: Date,
+    },
+    original: {
+      type: new Schema({ text: String, image: String }, { _id: false }),
+      select: false, // never leaks unless a controller explicitly opts in
     },
     pinnedAt: {
       type: Date,

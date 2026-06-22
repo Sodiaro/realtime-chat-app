@@ -1,7 +1,7 @@
 import { memo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useShallow } from "zustand/react/shallow";
-import { Check, CheckCheck, Clock, AlertCircle, Pencil, Trash2, X, Reply, Forward, Pin, Flag, Star, FileText, Download, MapPin, MessageSquare, MoreVertical, Copy, Video, PhoneOutgoing, PhoneIncoming, PhoneMissed, Timer, Eye, EyeOff } from "lucide-react";
+import { Check, CheckCheck, Clock, AlertCircle, Pencil, Trash2, X, Reply, Forward, Pin, Flag, Star, FileText, Download, MapPin, MessageSquare, MoreVertical, Copy, Video, PhoneOutgoing, PhoneIncoming, PhoneMissed, Timer, Eye, EyeOff, Ghost } from "lucide-react";
 import toast from "react-hot-toast";
 import { useChatStore } from "../store/useChatStore";
 import { formatMessageTime } from "../lib/utils";
@@ -64,6 +64,7 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users, grouped 
   const [editText, setEditText] = useState(message.text || "");
   const [menuOpen, setMenuOpen] = useState(false);
   const [zoomed, setZoomed] = useState(false);
+  const [revealOriginal, setRevealOriginal] = useState(false);
   const pressTimer = useRef(null);
   const longPressFired = useRef(false);
 
@@ -239,7 +240,31 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users, grouped 
         } ${mentionsMe && !isDeleted ? "!ring-2 !ring-primary/50" : ""}`}
       >
         {isDeleted ? (
-          <p className="italic opacity-60">This message was deleted</p>
+          message.antiDelete && message.original ? (
+            revealOriginal ? (
+              <div>
+                {message.original.image && (
+                  <img src={message.original.image} alt="" className="rounded-lg max-w-[260px] mb-1" />
+                )}
+                {message.original.text && (
+                  <p className="whitespace-pre-wrap break-words">{message.original.text}</p>
+                )}
+                <p className="text-[11px] italic opacity-60 mt-1 flex items-center gap-1">
+                  <Ghost className="size-3" /> recovered — was deleted
+                </p>
+              </div>
+            ) : (
+              <button
+                onClick={() => setRevealOriginal(true)}
+                className="flex items-center gap-1.5 text-sm italic opacity-70 hover:opacity-100"
+              >
+                <EyeOff className="size-3.5 shrink-0" /> Message deleted ·{" "}
+                <span className="underline not-italic">View original</span>
+              </button>
+            )
+          ) : (
+            <p className="italic opacity-60">This message was deleted</p>
+          )
         ) : editing ? (
           <div className="flex items-center gap-2">
             <input

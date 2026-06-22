@@ -121,6 +121,25 @@ export async function getOnlineUserIds(): Promise<string[]> {
   return [...rooms].filter((r) => r.startsWith("user:")).map((r) => r.slice(5));
 }
 
+// users in Ghost Mode: appear offline, don't broadcast typing, and can't be called.
+const ghostUsers = new Set<string>();
+export const isGhost = (userId: string) => ghostUsers.has(userId);
+
+// online ids minus ghost users — what we actually advertise to clients
+async function visibleOnlineIds(): Promise<string[]> {
+  return (await getOnlineUserIds()).filter((id) => !ghostUsers.has(id));
+}
+async function broadcastOnline() {
+  io.emit("getOnlineUsers", await visibleOnlineIds());
+}
+
+// called by the privacy controller when a user toggles Ghost Mode
+export async function setGhostPresence(userId: string, on: boolean) {
+  if (on) ghostUsers.add(userId);
+  else ghostUsers.delete(userId);
+  await broadcastOnline();
+}
+
 io.use((socket, next) => {
   try {
     const cookies = parseCookie(socket.handshake.headers.cookie || "");
@@ -142,11 +161,16 @@ io.on("connection", async (socket) => {
   socket.join(userRoom(userId));
   socketConnectionsActive.inc();
 
-  io.emit("getOnlineUsers", await getOnlineUserIds());
+  // keep the ghost-mode set fresh for this user
+  const meGhost = await User.findById(userId).select("ghostMode").lean();
+  if (meGhost?.ghostMode) ghostUsers.add(userId);
+  else ghostUsers.delete(userId);
 
-  // relay typing state to the other participant (cross-node via the adapter)
+  await broadcastOnline();
+
+  // relay typing state to the other participant — unless I'm a ghost (hidden)
   socket.on("typing", ({ to, isTyping }) => {
-    if (typeof to !== "string") return;
+    if (typeof to !== "string" || ghostUsers.has(userId)) return;
     io.to(userRoom(to)).emit("typing", { from: userId, isTyping: Boolean(isTyping) });
   });
 
@@ -202,6 +226,8 @@ io.on("connection", async (socket) => {
   // ---- WebRTC call signaling (relay only) ----
   socket.on("call:offer", ({ to, offer, video, fromName, fromPic }) => {
     if (typeof to !== "string") return;
+    // ghost mode = do-not-disturb: auto-decline so the caller's UI cleans up
+    if (ghostUsers.has(to)) return void socket.emit("call:reject", { from: to });
     io.to(userRoom(to)).emit("call:incoming", { from: userId, fromName, fromPic, offer, video });
   });
   socket.on("call:answer", ({ to, answer }) => {
@@ -221,7 +247,8 @@ io.on("connection", async (socket) => {
   // ring the invitees; remember who can join later (group calls)
   socket.on("gcall:invite", ({ roomId, groupId, to, video, title, fromName, fromPic }) => {
     if (typeof roomId !== "string" || !Array.isArray(to)) return;
-    const recipients = to.filter((t): t is string => typeof t === "string");
+    // ghost-mode members are do-not-disturb — don't ring them
+    const recipients = to.filter((t): t is string => typeof t === "string" && !ghostUsers.has(t));
     roomMeta.set(roomId, { groupId, notify: new Set<string>([userId, ...recipients]) });
     for (const t of recipients) {
       io.to(userRoom(t)).emit("gcall:incoming", { roomId, from: userId, fromName, fromPic, video: Boolean(video), title, groupId });
@@ -274,11 +301,12 @@ io.on("connection", async (socket) => {
     // drop out of any group calls this socket was in
     for (const roomId of [...callRooms.keys()]) leaveCallRoom(roomId, userId);
     const online = await getOnlineUserIds();
-    // if this was the user's last device, stamp their last-seen time
+    // if this was the user's last device, stamp their last-seen time + drop ghost flag
     if (!online.includes(userId)) {
+      ghostUsers.delete(userId);
       await User.updateOne({ _id: userId }, { $set: { lastSeen: new Date() } }).catch(() => {});
     }
-    io.emit("getOnlineUsers", online);
+    io.emit("getOnlineUsers", online.filter((id) => !ghostUsers.has(id)));
   });
 });
 

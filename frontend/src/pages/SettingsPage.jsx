@@ -230,8 +230,14 @@ const SettingsPage = () => {
                 checked={!!authUser.ghostMode}
                 onChange={(e) => updatePrivacy({ ghostMode: e.target.checked })}
                 title="Ghost mode"
-                desc="Hides your read activity, last seen, status views, and edit/delete indicators."
+                desc="Appear offline, hide your profile photo, last seen, typing, read receipts, status views and edit/delete marks."
               />
+              <ul className="text-xs text-base-content/60 pl-9 list-disc space-y-0.5">
+                <li>You show as offline and your profile photo is hidden</li>
+                <li>You read, type, and view statuses invisibly</li>
+                <li>People can't call you (treated as Do Not Disturb)</li>
+                <li>You can recover messages others delete in your chats (“view original”)</li>
+              </ul>
               <p className="text-xs text-base-content/60 pl-9">
                 You stay findable and people can still message you — but they'll see a{" "}
                 <span className="inline-flex items-center gap-0.5 font-medium"><Ghost className="size-3" />Ghost</span>{" "}

@@ -10,6 +10,7 @@ import Message from "../models/message.model.js";
 import Conversation from "../models/conversation.model.js";
 import Session from "../models/session.model.js";
 import cloudinary from "../lib/cloudinary.js";
+import { setGhostPresence } from "../lib/socket.js";
 
 // create a device session for this login and issue a token bound to it
 async function startSession(req: Request, res: Response, user: IUser) {
@@ -376,6 +377,8 @@ export const updatePrivacy: RequestHandler = async (req, res, next) => {
     }
 
     const user = await User.findByIdAndUpdate(myId, { $set: set }, { new: true }).select("-password");
+    // toggling ghost mode flips presence immediately (appear/disappear online)
+    if (ghostMode !== undefined) await setGhostPresence(String(myId), Boolean(ghostMode));
     res.status(200).json(user);
   } catch (error) {
     next(error);
