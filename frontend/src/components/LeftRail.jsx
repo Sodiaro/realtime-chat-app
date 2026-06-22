@@ -6,7 +6,7 @@ import { useThemeStore } from "../store/useThemeStore";
 import { usePanelStore } from "../store/usePanelStore";
 import Avatar from "./Avatar";
 import ConfirmModal from "./ui/ConfirmModal";
-import { MessageSquare, UserRound, Phone, Clock, Star, Sun, Moon, LogOut, Settings, User, Users } from "lucide-react";
+import { MessageSquare, UserRound, Phone, Clock, Star, Sun, Moon, LogOut, Settings, User, Users, Shield } from "lucide-react";
 
 const RailLink = ({ to, icon, label, badge = 0 }) => {
   const { pathname } = useLocation();
@@ -59,7 +59,7 @@ const LeftRail = () => {
   );
 
   return (
-    <div className="hidden md:flex w-[68px] shrink-0 flex-col items-center py-4 gap-2 bg-base-200/40 border-r border-base-300/50">
+    <div className="hidden md:flex fixed inset-y-0 left-0 z-40 w-[68px] flex-col items-center py-4 gap-2 bg-base-200/40 border-r border-base-300/50">
       <div className="dropdown dropdown-right">
         <button
           tabIndex={0}
@@ -87,6 +87,13 @@ const LeftRail = () => {
               <Settings className="size-4" /> Settings
             </Link>
           </li>
+          {authUser?.isAdmin && (
+            <li>
+              <Link to="/admin">
+                <Shield className="size-4" /> Admin
+              </Link>
+            </li>
+          )}
         </ul>
       </div>
 

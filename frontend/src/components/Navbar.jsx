@@ -39,8 +39,8 @@ const Navbar = () => {
   );
 
   const closeMenu = () => document.activeElement?.blur();
-  // on the chat screen the desktop layout uses the left icon rail instead
-  const hiddenOnDesktop = authUser && pathname === "/";
+  // logged-in desktop uses the persistent left icon rail instead of the top bar
+  const hiddenOnDesktop = Boolean(authUser);
 
   return (
     <header
@@ -105,7 +105,7 @@ const Navbar = () => {
             {isDark ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
           </button>
 
-          {authUser ? (
+          {authUser && (
             <div className="dropdown dropdown-end">
               <button
                 tabIndex={0}
@@ -152,10 +152,6 @@ const Navbar = () => {
                 </li>
               </ul>
             </div>
-          ) : (
-            <Link to="/settings" className="btn btn-ghost btn-sm btn-circle text-base-content/60" title="Settings">
-              <Settings className="size-[18px]" />
-            </Link>
           )}
         </div>
       </div>

@@ -1,5 +1,6 @@
 import React from "react";
 import Navbar from "./components/Navbar";
+import LeftRail from "./components/LeftRail";
 import { Routes, Route, Navigate } from "react-router-dom"
 
 import HomePage from "./pages/HomePage";
@@ -83,7 +84,9 @@ const App = () => {
   return (
     <div className="min-h-screen bg-base-100 text-base-content">
       <Navbar />
+      {authUser && <LeftRail />}
 
+      <div className={authUser ? "md:pl-[68px]" : ""}>
       <Routes>
         <Route path="/" element={authUser ? <HomePage /> : <Navigate to="/login" />} />
         <Route path="/signup" element={!authUser ? <SignUpPage /> : <Navigate to="/" />} />
@@ -97,6 +100,7 @@ const App = () => {
         <Route path="/communities/join/:code" element={authUser ? <CommunityJoinPage /> : <Navigate to="/login" />} />
         <Route path="/join/:code" element={authUser ? <JoinGroupPage /> : <Navigate to="/login" />} />
       </Routes>
+      </div>
 
       <CallOverlay />
       <GroupCallOverlay />

@@ -2,7 +2,6 @@ import { useChatStore } from "../store/useChatStore";
 import { useResizable } from "../hooks/useResizable";
 
 import Sidebar from "../components/Sidebar";
-import LeftRail from "../components/LeftRail";
 import NoChatSelected from "../components/NoChatSelected";
 import ChatContainer from "../components/ChatContainer";
 import ChatInfoPanel from "../components/ChatInfoPanel";
@@ -39,8 +38,6 @@ const HomePage = () => {
     // mobile: under the top navbar. desktop: full height (navbar hidden, icon rail instead)
     <div className="h-[100dvh] pt-14 md:pt-0 bg-base-100">
       <div className="h-[calc(100dvh-3.5rem)] md:h-[100dvh] flex overflow-hidden">
-        <LeftRail />
-
         {/* chat list — full width on mobile, drag-resizable rail on desktop */}
         <div
           style={{ "--sw": `${sidebarW}px` }}
