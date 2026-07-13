@@ -1,13 +1,16 @@
 import { useState } from "react";
-import { X, Search, Ban, MoreVertical, BellOff, Bell, Archive, Info, UserRound, Timer, Phone, Video, Pin, ArrowLeft, Ghost } from "lucide-react";
+import { X, Search, Ban, MoreVertical, BellOff, Bell, Archive, Info, UserRound, Timer, Phone, Video, Pin, ArrowLeft, Ghost, Code2 } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 import { useCallStore } from "../store/useCallStore";
 import { useGroupCallStore } from "../store/useGroupCallStore";
+import { useDevModeStore } from "../store/useDevModeStore";
+import { resolveMode } from "../store/resolveMode";
 import { axiosInstance } from "../lib/axios";
 import { formatLastSeen, formatMessageTime } from "../lib/utils";
 import GroupInfoModal from "./GroupInfoModal";
 import UserProfileModal from "./UserProfileModal";
+import DevModeToggle from "./DevModeToggle";
 import Avatar from "./Avatar";
 
 const ChatHeader = () => {
@@ -41,6 +44,12 @@ const ChatHeader = () => {
       : conversations.find(
           (c) => !c.isGroup && c.participants?.some((p) => (p._id || p) === selectedUser._id)
         );
+
+  // Dev Mode: the resolved mode for this chat (gated by the feature flag). `flags` is
+  // subscribed so the header re-renders when availability or the workspace toggle change.
+  const flags = useDevModeStore((s) => s.flags);
+  const devAvailable = Boolean(flags?.dev_mode);
+  const mode = resolveMode(flags, authUser, conv);
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -102,6 +111,11 @@ const ChatHeader = () => {
                   title="This person has Ghost Mode on — read receipts, last seen, status views and edit/delete indicators may be hidden"
                 >
                   <Ghost className="size-3" /> Ghost
+                </span>
+              )}
+              {devAvailable && mode === "dev" && (
+                <span className="badge badge-sm badge-primary gap-1 shrink-0" title="Dev Mode is on for this chat">
+                  <Code2 className="size-3" /> Dev
                 </span>
               )}
             </div>
@@ -255,6 +269,22 @@ const ChatHeader = () => {
                         </button>
                       ))}
                     </div>
+                  </li>
+                </>
+              )}
+
+              {/* dev workspace (groups only, when the feature flag is on) */}
+              {isGroup && devAvailable && conv && (
+                <>
+                  <li className="menu-title flex-row items-center gap-2 px-3 pt-2 pb-1 text-[11px] uppercase tracking-wide opacity-50">
+                    <Code2 className="size-3.5" /> Dev workspace
+                  </li>
+                  <li className="px-3 pb-2 hover:bg-transparent focus:bg-transparent">
+                    <DevModeToggle
+                      variant="workspace"
+                      conversation={conv}
+                      desc="Turn this group into a developer workspace."
+                    />
                   </li>
                 </>
               )}

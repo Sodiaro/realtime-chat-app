@@ -34,3 +34,10 @@ export const messagesSentTotal = new client.Counter({
   help: "Total chat messages sent",
   registers: [register],
 });
+
+export const devmodeTogglesTotal = new client.Counter({
+  name: "devmode_toggles_total",
+  help: "Dev Mode toggles, by scope (user/conversation/community) and resulting value (on/off)",
+  labelNames: ["scope", "value"],
+  registers: [register],
+});

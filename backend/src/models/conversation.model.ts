@@ -1,5 +1,16 @@
 import mongoose, { Schema, Types } from "mongoose";
 
+// Per-workspace Dev Mode override (Phase 1). Three-state by design:
+//   • absent (undefined) ⇒ inherit the viewer's personal default
+//   • { enabled: true }  ⇒ this workspace is explicitly a dev workspace
+//   • { enabled: false } ⇒ explicitly forced to Chat Mode (overrides the default)
+// (Community.model defines an identical shape — keep the two in sync.)
+export interface IWorkspaceDevMode {
+  enabled: boolean;
+  enabledBy?: Types.ObjectId; // who last toggled it (audit trail)
+  enabledAt?: Date;
+}
+
 export interface IConversation {
   _id: Types.ObjectId;
   key: string; // sorted participant ids — dedups 1:1 conversations
@@ -23,9 +34,22 @@ export interface IConversation {
   // scoped, lowercased uniqueness key for groups: "g:<name>" (standalone) or
   // "c:<communityId>:<name>" (community group). Absent for DMs/announcements.
   nameKey?: string;
+  devMode?: IWorkspaceDevMode; // groups only; absent ⇒ inherit (see IWorkspaceDevMode)
   createdAt: Date;
   updatedAt: Date;
 }
+
+// `_id: false` (it's a single embedded doc, not a collection row). Paired below with
+// `default: undefined` on the path so Mongoose never auto-creates it — the path is
+// absent until a group is explicitly toggled.
+const workspaceDevModeSchema = new Schema<IWorkspaceDevMode>(
+  {
+    enabled: { type: Boolean, default: false },
+    enabledBy: { type: Schema.Types.ObjectId, ref: "User" },
+    enabledAt: { type: Date },
+  },
+  { _id: false }
+);
 
 const conversationSchema = new Schema<IConversation>(
   {
@@ -48,6 +72,9 @@ const conversationSchema = new Schema<IConversation>(
     communityId: { type: Schema.Types.ObjectId, ref: "Community", index: true },
     isAnnouncement: { type: Boolean, default: false },
     nameKey: { type: String },
+    // default: undefined ⇒ absent unless explicitly set (preserves three-state +
+    // backward compatibility; no index, no migration).
+    devMode: { type: workspaceDevModeSchema, default: undefined },
   },
   { timestamps: true }
 );

@@ -16,6 +16,12 @@ export default defineConfig({
       CLOUDINARY_API_KEY: "test",
       CLOUDINARY_API_SECRET: "test",
       CORS_ORIGIN: "http://localhost:5173",
+      // pin Dev Mode flags OFF so the suite is hermetic and never depends on a local
+      // .env (dotenv won't override these already-set process.env values). Tests that
+      // need the flag ON mock the withFlags middleware instead.
+      FEATURE_DEV_MODE: "false",
+      DEV_MODE_ROLLOUT_PCT: "0",
+      DEV_MODE_ALLOWLIST: "",
     },
   },
 });

@@ -4,10 +4,11 @@ import { useChatBgStore, CHAT_BACKGROUNDS } from "../store/useChatBgStore";
 import { usePrefsStore } from "../store/usePrefsStore";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
+import { useDevModeStore } from "../store/useDevModeStore";
 import Avatar from "../components/Avatar";
 import {
   Monitor, Sun, Moon, User, Shield, Bell, MessageSquare, Palette, Timer,
-  Ban, Archive, HardDrive, Lock, Camera, Ghost,
+  Ban, Archive, HardDrive, Lock, Camera, Ghost, Code2,
 } from "lucide-react";
 
 // turn a raw user-agent string into a friendly "Browser · OS" label
@@ -72,9 +73,10 @@ const SettingsPage = () => {
   } = usePrefsStore();
   const {
     authUser, updateProfile, isUpdatingProfile, blockUser, changePassword,
-    logoutAllDevices, deleteAccount, updatePrivacy, getSessions, revokeSession,
+    logoutAllDevices, deleteAccount, updatePrivacy, getSessions, revokeSession, setDevMode,
   } = useAuthStore();
   const { users, conversations } = useChatStore();
+  const devAvailable = useDevModeStore((s) => Boolean(s.flags?.dev_mode));
 
   const THEME_OPTIONS = [
     { key: "system", label: "System", icon: Monitor },
@@ -112,6 +114,13 @@ const SettingsPage = () => {
   const dirtyProfile =
     username !== (authUser.username || "") || bio !== (authUser.bio || "") || status !== (authUser.status || "");
 
+  // the "Developer" section only exists when the dev_mode feature flag is on for this user
+  const navSections = devAvailable
+    ? SECTIONS.flatMap((s) =>
+        s.id === "chat" ? [s, { id: "developer", label: "Developer", icon: Code2 }] : [s]
+      )
+    : SECTIONS;
+
   const onPhoto = (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -147,7 +156,7 @@ const SettingsPage = () => {
       <div className="lg:grid lg:grid-cols-[220px_1fr] lg:gap-8">
         {/* section nav (desktop) */}
         <nav className="hidden lg:block sticky top-20 self-start space-y-1">
-          {SECTIONS.map((s) => (
+          {navSections.map((s) => (
             <a
               key={s.id}
               href={`#${s.id}`}
@@ -288,6 +297,28 @@ const SettingsPage = () => {
               </div>
             </div>
           </Card>
+
+          {/* DEVELOPER (only when the dev_mode flag is enabled for this user) */}
+          {devAvailable && (
+            <Card
+              id="developer"
+              title="Developer"
+              desc="Dev Mode layers developer tools on top of your chats. Chat Mode stays exactly as it is today."
+            >
+              <Toggle
+                checked={!!authUser.devMode?.enabled}
+                onChange={(e) => setDevMode({ enabled: e.target.checked })}
+                title="Dev Mode"
+                desc="Switch your chats into Dev Mode. Also your default in workspaces that haven't set their own."
+              />
+              <Toggle
+                checked={!!authUser.devMode?.defaultForNewWorkspaces}
+                onChange={(e) => setDevMode({ defaultForNewWorkspaces: e.target.checked })}
+                title="Default new workspaces to Dev Mode"
+                desc="Groups and communities you create will start in Dev Mode."
+              />
+            </Card>
+          )}
 
           {/* APPEARANCE */}
           <Card id="appearance" title="Theme & appearance" desc="System follows your device.">

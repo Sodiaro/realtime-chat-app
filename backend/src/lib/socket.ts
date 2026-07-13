@@ -40,6 +40,12 @@ interface ServerToClientEvents {
   "gcall:ice": (p: { roomId: string; from: string; candidate: unknown }) => void;
   "gcall:peer-left": (p: { roomId: string; userId: string }) => void;
   "gcall:state": (p: { roomId: string; groupId?: string; active: boolean; count: number }) => void;
+  // a workspace's Dev Mode override changed (group or community); members re-resolve their mode
+  "workspace:devmode": (p: {
+    scope: "conversation" | "community";
+    id: string;
+    devMode: { enabled: boolean; enabledBy?: string; enabledAt?: string };
+  }) => void;
 }
 
 interface ClientToServerEvents {
@@ -142,6 +148,28 @@ export async function setGhostPresence(userId: string, on: boolean) {
   if (on) ghostUsers.add(userId);
   else ghostUsers.delete(userId);
   await broadcastOnline();
+}
+
+// Notify a workspace's members that its Dev Mode override changed. Emits ONLY to the
+// affected members' personal rooms (`user:<id>`) — no global broadcast — so it rides
+// the Redis adapter across nodes automatically and clients never need to poll.
+// Serializes the audit fields (ObjectId/Date → string) for the wire.
+export function emitWorkspaceDevMode(
+  scope: "conversation" | "community",
+  id: string,
+  devMode: { enabled: boolean; enabledBy?: { toString(): string } | null; enabledAt?: Date | null },
+  memberIds: string[]
+) {
+  const payload = {
+    scope,
+    id,
+    devMode: {
+      enabled: devMode.enabled,
+      enabledBy: devMode.enabledBy ? String(devMode.enabledBy) : undefined,
+      enabledAt: devMode.enabledAt ? new Date(devMode.enabledAt).toISOString() : undefined,
+    },
+  };
+  for (const uid of memberIds) io.to(userRoom(uid)).emit("workspace:devmode", payload);
 }
 
 io.use((socket, next) => {

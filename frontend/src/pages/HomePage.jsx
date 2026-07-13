@@ -1,10 +1,14 @@
 import { useChatStore } from "../store/useChatStore";
+import { useAuthStore } from "../store/useAuthStore";
+import { useDevModeStore } from "../store/useDevModeStore";
+import { isDevWorkspace } from "../store/resolveMode";
 import { useResizable } from "../hooks/useResizable";
 
 import Sidebar from "../components/Sidebar";
 import NoChatSelected from "../components/NoChatSelected";
 import ChatContainer from "../components/ChatContainer";
 import ChatInfoPanel from "../components/ChatInfoPanel";
+import DevWorkspace from "../components/workspace/DevWorkspace";
 
 // thin drag strip shown only on desktop
 const ResizeHandle = ({ onPointerDown, side }) => (
@@ -21,6 +25,11 @@ const ResizeHandle = ({ onPointerDown, side }) => (
 
 const HomePage = () => {
   const { selectedUser } = useChatStore();
+  const { authUser } = useAuthStore();
+  const flags = useDevModeStore((s) => s.flags);
+  // a dev-mode group becomes a workspace; DMs / non-dev groups stay normal chats.
+  // With the flag off this is always false ⇒ the chat experience is unchanged.
+  const devWorkspace = isDevWorkspace(flags, authUser, selectedUser);
   const [sidebarW, dragSidebar] = useResizable("devchat-sidebar-w", {
     initial: 340,
     min: 260,
@@ -47,9 +56,10 @@ const HomePage = () => {
           <ResizeHandle onPointerDown={dragSidebar} side="right" />
         </div>
 
-        {/* conversation — fills the remaining width */}
+        {/* conversation — fills the remaining width. dev-mode groups render the workspace;
+            everything else (DMs, non-dev groups) keeps the existing chat experience verbatim */}
         <div className={`${selectedUser ? "flex" : "hidden md:flex"} flex-1 min-w-0`}>
-          {!selectedUser ? <NoChatSelected /> : <ChatContainer />}
+          {!selectedUser ? <NoChatSelected /> : devWorkspace ? <DevWorkspace conversation={selectedUser} /> : <ChatContainer />}
         </div>
 
         {/* right info panel — wide screens only, when a chat is open; resizable */}

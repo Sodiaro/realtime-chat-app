@@ -8,6 +8,13 @@ export interface IPrivacy {
   profilePhoto: Visibility;
 }
 
+// Personal Dev Mode preference (Phase 1). `enabled` is the user's default mode for
+// DMs/Notes and the fallback for any workspace that hasn't set its own override.
+export interface IDevModePref {
+  enabled: boolean;
+  defaultForNewWorkspaces: boolean; // pre-enable Dev Mode in groups/communities I create
+}
+
 export interface IUser {
   _id: Types.ObjectId;
   email: string;
@@ -30,6 +37,7 @@ export interface IUser {
   resetOtpAttempts: number;
   privacy: IPrivacy;
   ghostMode: boolean; // suppresses read/edit/delete/last-seen/status-view activity (publicly flagged)
+  devMode: IDevModePref;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -98,6 +106,13 @@ const userSchema = new Schema<IUser>(
       profilePhoto: { type: String, enum: ["everyone", "contacts", "nobody"], default: "everyone" },
     },
     ghostMode: { type: Boolean, default: false },
+    // Nested-default pref, same shape/behavior as `privacy` above: legacy users
+    // hydrate with safe defaults, and it stays private to the owner because peer
+    // serializers select an explicit field allowlist that excludes devMode.
+    devMode: {
+      enabled: { type: Boolean, default: false },
+      defaultForNewWorkspaces: { type: Boolean, default: false },
+    },
   },
   { timestamps: true }
 );

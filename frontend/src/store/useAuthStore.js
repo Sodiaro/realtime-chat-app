@@ -2,6 +2,10 @@ import { create } from "zustand";
 import { axiosInstance } from "../lib/axios.js";
 import toast from "react-hot-toast";
 import { io } from "socket.io-client";
+import { useDevModeStore } from "./useDevModeStore.js";
+
+// keep the Dev Mode flag snapshot in step with the authenticated user
+const syncDevFlags = (flags) => useDevModeStore.getState().syncFlags(flags || {});
 
 const BASE_URL = import.meta.env.MODE === "development" ? "http://localhost:5001" : "/";
 
@@ -20,10 +24,12 @@ export const useAuthStore = create((set, get) => ({
       const res = await axiosInstance.get("/auth/check");
 
       set({ authUser: res.data });
+      syncDevFlags(res.data.flags); // /auth/check returns the resolved flag snapshot
       get().connectSocket();
     } catch (error) {
       console.log("Error in checkAuth:", error);
       set({ authUser: null });
+      syncDevFlags({});
     } finally {
       set({ isCheckingAuth: false });
     }
@@ -39,6 +45,7 @@ export const useAuthStore = create((set, get) => ({
         return;
       }
       set({ authUser: res.data, pendingEmail: null });
+      syncDevFlags(res.data.flags);
       toast.success("Account created successfully");
       get().connectSocket();
     } catch (error) {
@@ -52,6 +59,7 @@ export const useAuthStore = create((set, get) => ({
     try {
       const res = await axiosInstance.post("/auth/verify-email", { email, otp });
       set({ authUser: res.data, pendingEmail: null });
+      syncDevFlags(res.data.flags);
       toast.success("Email verified");
       get().connectSocket();
       return true;
@@ -75,6 +83,7 @@ export const useAuthStore = create((set, get) => ({
     try {
       const res = await axiosInstance.post("/auth/login", data);
       set({ authUser: res.data, pendingEmail: null });
+      syncDevFlags(res.data.flags); // login payload has no flags yet → cleared until /auth/check
       toast.success("Logged in successfully");
       get().connectSocket();
     } catch (error) {
@@ -94,6 +103,7 @@ export const useAuthStore = create((set, get) => ({
     try {
       await axiosInstance.post("/auth/logout");
       set({ authUser: null });
+      syncDevFlags({});
       toast.success("Logged out successfully");
       get().disconnectSocket();
     } catch (error) {
@@ -130,6 +140,21 @@ export const useAuthStore = create((set, get) => ({
       toast.success("Privacy updated");
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to update privacy");
+    }
+  },
+
+  // update the personal Dev Mode preference (enabled / defaultForNewWorkspaces).
+  // POST /auth/devmode returns the user + flag snapshot (same shape as /auth/check).
+  setDevMode: async (changes) => {
+    try {
+      const res = await axiosInstance.post("/auth/devmode", changes);
+      set({ authUser: res.data });
+      syncDevFlags(res.data.flags);
+      toast.success("Dev Mode preference saved");
+      return true;
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Couldn't update Dev Mode");
+      return false;
     }
   },
 
@@ -199,6 +224,7 @@ export const useAuthStore = create((set, get) => ({
     try {
       await axiosInstance.delete("/auth/me");
       set({ authUser: null });
+      syncDevFlags({});
       get().disconnectSocket();
       toast.success("Account deleted");
     } catch (error) {

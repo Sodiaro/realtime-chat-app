@@ -7,10 +7,11 @@ import Conversation, { getOrCreateDirect } from "../models/conversation.model.js
 import ScheduledMessage from "../models/scheduledMessage.model.js";
 import Report from "../models/report.model.js";
 import cloudinary from "../lib/cloudinary.js";
-import { io, userRoom, getOnlineUserIds } from "../lib/socket.js";
+import { io, userRoom, getOnlineUserIds, emitWorkspaceDevMode } from "../lib/socket.js";
 import { enqueueNewMessageNotification } from "../lib/queues.js";
 import { sendPush } from "../lib/push.js";
-import { messagesSentTotal } from "../lib/metrics.js";
+import { messagesSentTotal, devmodeTogglesTotal } from "../lib/metrics.js";
+import { logger } from "../lib/logger.js";
 
 const messagePreview = (m: {
   text?: string;
@@ -20,6 +21,7 @@ const messagePreview = (m: {
   poll?: unknown;
   location?: unknown;
   contact?: unknown;
+  code?: unknown;
 }) =>
   m.text ||
   (m.image
@@ -34,7 +36,9 @@ const messagePreview = (m: {
             ? "📍 Location"
             : m.contact
               ? "👤 Contact"
-              : "New message");
+              : m.code
+                ? "💻 Code"
+                : "New message");
 
 // build a poll subdocument from a {question, options[], multiple} payload
 function buildPoll(poll: { question?: string; options?: string[]; multiple?: boolean } | undefined) {
@@ -69,6 +73,29 @@ function buildContact(
     avatar: c.avatar ? String(c.avatar) : undefined,
   };
 }
+
+// shared code snippets (Phase 3). Language is coerced to an allowlist; oversized content
+// is rejected by the handlers (see MAX_CODE_BYTES) so the highlighter never gets a huge blob.
+const CODE_LANGS = new Set([
+  "plaintext", "ts", "tsx", "js", "jsx", "python", "go", "rust", "java", "json",
+  "bash", "sql", "html", "css", "yaml", "markdown", "c", "cpp", "csharp", "php", "ruby",
+]);
+export const MAX_CODE_BYTES = 20 * 1024; // ~500 lines
+
+// normalize a code payload into the stored shape, or undefined if there's no real content.
+// Size is validated separately in the handlers so they can return a clear 400.
+function buildCode(code: { language?: string; content?: string; filename?: string } | undefined) {
+  if (!code || typeof code.content !== "string" || !code.content.trim()) return undefined;
+  const lang = String(code.language || "plaintext").toLowerCase();
+  const filename = code.filename
+    ? String(code.filename).replace(/[/\\]/g, "").trim().slice(0, 100) || undefined
+    : undefined;
+  return { language: CODE_LANGS.has(lang) ? lang : "plaintext", content: code.content, filename };
+}
+
+// true when a provided code payload exceeds the size cap (→ caller returns 400)
+const codeTooLarge = (code: { content?: string } | undefined) =>
+  Boolean(code?.content) && Buffer.byteLength(String(code!.content), "utf8") > MAX_CODE_BYTES;
 
 // fetch OpenGraph metadata for the first URL in the text, then patch the message + notify
 async function applyLinkPreview(message: { _id: unknown; text?: string }) {
@@ -247,6 +274,7 @@ export const getConversations: RequestHandler = async (req, res, next) => {
       isPinned: c.pinnedBy?.some((id) => String(id) === myId) ?? false,
       isAdmin: c.admins?.some((id) => String(id) === myId) ?? false,
       disappearMinutes: c.disappearMinutes ?? 0,
+      devMode: c.devMode, // per-workspace Dev Mode override (absent ⇒ inherit)
     }));
 
     res.status(200).json(result);
@@ -274,7 +302,7 @@ export const getMessages: RequestHandler = async (req, res, next) => {
     let q = Message.find(query)
       .sort({ createdAt: -1 })
       .limit(limit)
-      .populate("replyTo", "text senderId image deletedAt");
+      .populate("replyTo", "text code.language senderId image deletedAt");
     if (iAmGhost) q = q.select("+original"); // anti-delete recovery for ghost viewers
     const page = await q.lean();
 
@@ -329,14 +357,19 @@ async function resolveMentions(
 
 export const sendMessage: RequestHandler = async (req, res, next) => {
   try {
-    const { text, image, audio, file, poll, location, contact, replyTo, viewOnce } = req.body;
+    const { text, image, audio, file, poll, location, contact, code, replyTo, viewOnce } = req.body;
     const { id: receiverId } = req.params;
     const senderId = req.user!._id;
 
+    if (codeTooLarge(code)) {
+      res.status(400).json({ message: "Code snippet too large (max 20KB)" });
+      return;
+    }
     const pollDoc = buildPoll(poll);
     const locationDoc = buildLocation(location);
     const contactDoc = buildContact(contact);
-    if (!text && !image && !audio && !file && !pollDoc && !locationDoc && !contactDoc) {
+    const codeDoc = buildCode(code);
+    if (!text && !image && !audio && !file && !pollDoc && !locationDoc && !contactDoc && !codeDoc) {
       res.status(400).json({ message: "Message cannot be empty" });
       return;
     }
@@ -387,6 +420,7 @@ export const sendMessage: RequestHandler = async (req, res, next) => {
       poll: pollDoc,
       location: locationDoc,
       contact: contactDoc,
+      code: codeDoc,
       mentions: await resolveMentions(text, conversation.participants),
       deliveredAt,
       expiresAt: computeExpiry(conversation.disappearMinutes),
@@ -395,7 +429,7 @@ export const sendMessage: RequestHandler = async (req, res, next) => {
     });
 
     await newMessage.save();
-    await newMessage.populate("replyTo", "text senderId image deletedAt");
+    await newMessage.populate("replyTo", "text code.language senderId image deletedAt");
     messagesSentTotal.inc();
     if (!viewOnce) applyLinkPreview(newMessage); // fire-and-forget unfurl (skip for view-once)
 
@@ -423,7 +457,7 @@ export const sendMessage: RequestHandler = async (req, res, next) => {
       if (!online.includes(String(receiverId))) {
         sendPush([String(receiverId)], {
           title: req.user!.fullName,
-          body: messagePreview({ text, image: imageUrl, audio: audioUrl, location: locationDoc, contact: contactDoc }),
+          body: messagePreview({ text, image: imageUrl, audio: audioUrl, location: locationDoc, contact: contactDoc, code: codeDoc }),
         }).catch(() => {});
       }
     }
@@ -670,7 +704,7 @@ export const pinMessage: RequestHandler = async (req, res, next) => {
     // toggle pin
     message.pinnedAt = message.pinnedAt ? undefined : new Date();
     await message.save();
-    await message.populate("replyTo", "text senderId image deletedAt");
+    await message.populate("replyTo", "text code.language senderId image deletedAt");
 
     await emitMessageUpdate(message);
     res.status(200).json(message);
@@ -790,6 +824,7 @@ export const forwardMessage: RequestHandler = async (req, res, next) => {
       file: original.file,
       location: original.location,
       contact: original.contact,
+      code: original.code,
       forwardedFrom: original.senderId,
       expiresAt: computeExpiry(target.disappearMinutes),
     });
@@ -977,7 +1012,7 @@ export const getConversationMessages: RequestHandler = async (req, res, next) =>
     let q = Message.find(query)
       .sort({ createdAt: -1 })
       .limit(limit)
-      .populate("replyTo", "text senderId image deletedAt");
+      .populate("replyTo", "text code.language senderId image deletedAt");
     if (iAmGhost) q = q.select("+original"); // anti-delete recovery for ghost viewers
     const page = await q.lean();
 
@@ -1003,12 +1038,17 @@ export const sendToConversation: RequestHandler = async (req, res, next) => {
   try {
     const senderId = req.user!._id;
     const { conversationId } = req.params;
-    const { text, image, audio, file, poll, location, contact, replyTo, viewOnce } = req.body;
+    const { text, image, audio, file, poll, location, contact, code, replyTo, viewOnce } = req.body;
 
+    if (codeTooLarge(code)) {
+      res.status(400).json({ message: "Code snippet too large (max 20KB)" });
+      return;
+    }
     const pollDoc = buildPoll(poll);
     const locationDoc = buildLocation(location);
     const contactDoc = buildContact(contact);
-    if (!text && !image && !audio && !file && !pollDoc && !locationDoc && !contactDoc) {
+    const codeDoc = buildCode(code);
+    if (!text && !image && !audio && !file && !pollDoc && !locationDoc && !contactDoc && !codeDoc) {
       res.status(400).json({ message: "Message cannot be empty" });
       return;
     }
@@ -1052,13 +1092,14 @@ export const sendToConversation: RequestHandler = async (req, res, next) => {
       poll: pollDoc,
       location: locationDoc,
       contact: contactDoc,
+      code: codeDoc,
       mentions: await resolveMentions(text, conversation.participants),
       expiresAt: computeExpiry(conversation.disappearMinutes),
       viewOnce: Boolean(viewOnce),
       replyTo: replyTo || undefined,
     });
     await newMessage.save();
-    await newMessage.populate("replyTo", "text senderId image deletedAt");
+    await newMessage.populate("replyTo", "text code.language senderId image deletedAt");
     messagesSentTotal.inc();
     if (!viewOnce) applyLinkPreview(newMessage); // fire-and-forget unfurl (skip for view-once)
 
@@ -1316,7 +1357,7 @@ export const getStarred: RequestHandler = async (req, res, next) => {
     const messages = await Message.find({ starredBy: myId, deletedAt: { $exists: false } })
       .sort({ createdAt: -1 })
       .limit(100)
-      .populate("replyTo", "text senderId image deletedAt")
+      .populate("replyTo", "text code.language senderId image deletedAt")
       .lean();
     res.status(200).json(messages);
   } catch (error) {
@@ -1365,6 +1406,39 @@ export const renameGroup: RequestHandler = async (req, res, next) => {
 
     await conv.save();
     await emitConversationUpdated(conv._id);
+    res.status(200).json(conv);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Toggle Dev Mode for a group workspace (admins only, flag-gated). Records who last
+// changed it + when (audit). `{ enabled:false }` is an explicit Chat-Mode override —
+// distinct from the field being absent (which means "inherit"). The realtime broadcast
+// to members is intentionally deferred to a later step.
+export const setConversationDevMode: RequestHandler = async (req, res, next) => {
+  try {
+    if (!req.flags?.dev_mode)
+      return void res.status(403).json({ message: "Dev Mode is not available for your account" });
+
+    const myId = String(req.user!._id);
+    const { conversationId } = req.params;
+
+    const conv = await Conversation.findById(conversationId);
+    if (!conv || !conv.isGroup) return void res.status(404).json({ message: "Group not found" });
+    if (!conv.admins.map(String).includes(myId))
+      return void res.status(403).json({ message: "Admins only" });
+
+    const { enabled } = req.body;
+    if (typeof enabled !== "boolean")
+      return void res.status(400).json({ message: "enabled must be a boolean" });
+
+    conv.devMode = { enabled, enabledBy: req.user!._id, enabledAt: new Date() };
+    await conv.save();
+    // realtime: tell every member to re-resolve their mode (multi-device + other members)
+    emitWorkspaceDevMode("conversation", String(conv._id), conv.devMode, conv.participants.map(String));
+    devmodeTogglesTotal.inc({ scope: "conversation", value: enabled ? "on" : "off" });
+    logger.info({ userId: myId, conversationId: String(conv._id), enabled }, "workspace devmode toggle");
     res.status(200).json(conv);
   } catch (error) {
     next(error);

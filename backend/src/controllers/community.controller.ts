@@ -3,7 +3,9 @@ import mongoose, { Types } from "mongoose";
 import Community from "../models/community.model.js";
 import Conversation from "../models/conversation.model.js";
 import User from "../models/user.model.js";
-import { io, userRoom } from "../lib/socket.js";
+import { io, userRoom, emitWorkspaceDevMode } from "../lib/socket.js";
+import { logger } from "../lib/logger.js";
+import { devmodeTogglesTotal } from "../lib/metrics.js";
 
 const MAX_GROUP_MEMBERS = 200;
 
@@ -312,6 +314,36 @@ export const updateCommunity: RequestHandler = async (req, res, next) => {
       community.avatar = (await cloudinary.uploader.upload(avatar)).secure_url;
     }
     await community.save();
+    res.status(200).json(community);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Toggle Dev Mode for a community workspace (admins only, flag-gated). Same audit +
+// three-state semantics as the group endpoint. Realtime broadcast deferred.
+export const setCommunityDevMode: RequestHandler = async (req, res, next) => {
+  try {
+    if (!req.flags?.dev_mode)
+      return void res.status(403).json({ message: "Dev Mode is not available for your account" });
+
+    const myId = String(req.user!._id);
+    const { id } = req.params;
+
+    const community = await Community.findById(id);
+    if (!community) return void res.status(404).json({ message: "Community not found" });
+    if (!isAdminOf(community, myId)) return void res.status(403).json({ message: "Admins only" });
+
+    const { enabled } = req.body;
+    if (typeof enabled !== "boolean")
+      return void res.status(400).json({ message: "enabled must be a boolean" });
+
+    community.devMode = { enabled, enabledBy: req.user!._id, enabledAt: new Date() };
+    await community.save();
+    // realtime: notify every community member to re-resolve their mode
+    emitWorkspaceDevMode("community", String(community._id), community.devMode, community.members.map(String));
+    devmodeTogglesTotal.inc({ scope: "community", value: enabled ? "on" : "off" });
+    logger.info({ userId: myId, communityId: String(community._id), enabled }, "workspace devmode toggle");
     res.status(200).json(community);
   } catch (error) {
     next(error);
