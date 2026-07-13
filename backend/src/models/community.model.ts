@@ -5,6 +5,16 @@ import mongoose, { Schema, Types } from "mongoose";
 // individual groups à la carte — they don't have to belong to every group.
 // Groups link back via Conversation.communityId; the announcement channel is a
 // normal group conversation flagged isAnnouncement + onlyAdminsCanMessage.
+// Per-workspace Dev Mode override (Phase 1). Identical three-state shape to
+// Conversation.IWorkspaceDevMode (absent ⇒ inherit / true ⇒ dev / false ⇒ chat).
+// Defined locally to keep models self-contained (matching the repo convention);
+// keep in sync with conversation.model.ts.
+export interface IWorkspaceDevMode {
+  enabled: boolean;
+  enabledBy?: Types.ObjectId; // who last toggled it (audit trail)
+  enabledAt?: Date;
+}
+
 export interface ICommunity {
   _id: Types.ObjectId;
   name: string;
@@ -17,9 +27,21 @@ export interface ICommunity {
   announcementId: Types.ObjectId; // the announcement channel conversation
   inviteCode?: string; // join-by-link code (absent = link disabled)
   nameKey?: string; // lowercased name for case-insensitive uniqueness
+  devMode?: IWorkspaceDevMode; // absent ⇒ inherit (see IWorkspaceDevMode)
   createdAt: Date;
   updatedAt: Date;
 }
+
+// Single embedded subdoc; paired with `default: undefined` on the path so Mongoose
+// never auto-creates it — absent until the community is explicitly toggled.
+const workspaceDevModeSchema = new Schema<IWorkspaceDevMode>(
+  {
+    enabled: { type: Boolean, default: false },
+    enabledBy: { type: Schema.Types.ObjectId, ref: "User" },
+    enabledAt: { type: Date },
+  },
+  { _id: false }
+);
 
 const communitySchema = new Schema<ICommunity>(
   {
@@ -33,6 +55,8 @@ const communitySchema = new Schema<ICommunity>(
     announcementId: { type: Schema.Types.ObjectId, ref: "Conversation", required: true },
     inviteCode: { type: String, unique: true, sparse: true },
     nameKey: { type: String },
+    // default: undefined ⇒ absent unless explicitly set (three-state + backward compat).
+    devMode: { type: workspaceDevModeSchema, default: undefined },
   },
   { timestamps: true }
 );

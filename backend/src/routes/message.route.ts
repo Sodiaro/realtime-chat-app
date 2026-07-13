@@ -1,5 +1,6 @@
 import express from "express";
 import { protectRoute } from "../middleware/auth.middleware.js";
+import { withFlags } from "../middleware/flags.middleware.js";
 import {
   getConversations,
   getMessages,
@@ -29,6 +30,7 @@ import {
   cancelScheduledMessage,
   getSharedMedia,
   renameGroup,
+  setConversationDevMode,
   addGroupMembers,
   removeGroupMember,
   leaveGroup,
@@ -67,6 +69,7 @@ router.post("/conversation/:conversationId/archive", protectRoute, toggleArchive
 router.post("/conversation/:conversationId/pin", protectRoute, togglePin);
 router.post("/conversation/:conversationId/disappearing", protectRoute, setDisappearing);
 router.post("/conversation/:conversationId/admin", protectRoute, setGroupAdmin);
+router.patch("/conversation/:conversationId/devmode", protectRoute, withFlags, setConversationDevMode);
 router.post("/conversation/:conversationId/invite", protectRoute, createInvite);
 router.delete("/conversation/:conversationId/invite", protectRoute, revokeInvite);
 router.post("/conversation/:conversationId/members", protectRoute, addGroupMembers);

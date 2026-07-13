@@ -4,6 +4,8 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { generateToken } from "../lib/utils.js";
 import { env } from "../lib/env.js";
+import { logger } from "../lib/logger.js";
+import { devmodeTogglesTotal } from "../lib/metrics.js";
 import { sendOtpEmail, sendResetEmail } from "../lib/email.js";
 import User, { type IUser } from "../models/user.model.js";
 import Message from "../models/message.model.js";
@@ -32,6 +34,7 @@ const publicUser = (u: IUser) => ({
   status: u.status,
   isAdmin: u.isAdmin,
   privacy: u.privacy,
+  devMode: u.devMode,
 });
 
 // cryptographically secure 6-digit code
@@ -385,9 +388,61 @@ export const updatePrivacy: RequestHandler = async (req, res, next) => {
   }
 };
 
+// Update the caller's personal Dev Mode preference. Mirrors updatePrivacy, but is
+// gated by the dev_mode feature flag (server-side — client gating is cosmetic).
+export const updateDevMode: RequestHandler = async (req, res, next) => {
+  try {
+    // hard gate: can't change a preference for a feature you don't have
+    if (!req.flags?.dev_mode) {
+      res.status(403).json({ message: "Dev Mode is not available for your account" });
+      return;
+    }
+
+    const myId = req.user!._id;
+    const { enabled, defaultForNewWorkspaces } = req.body;
+    const set: Record<string, unknown> = {};
+
+    if (enabled !== undefined) {
+      if (typeof enabled !== "boolean") {
+        return void res.status(400).json({ message: "enabled must be a boolean" });
+      }
+      set["devMode.enabled"] = enabled;
+    }
+    if (defaultForNewWorkspaces !== undefined) {
+      if (typeof defaultForNewWorkspaces !== "boolean") {
+        return void res.status(400).json({ message: "defaultForNewWorkspaces must be a boolean" });
+      }
+      set["devMode.defaultForNewWorkspaces"] = defaultForNewWorkspaces;
+    }
+
+    if (Object.keys(set).length === 0) {
+      return void res.status(400).json({ message: "Nothing to update" });
+    }
+
+    const user = await User.findByIdAndUpdate(myId, { $set: set }, { new: true }).select("-password");
+    if (!user) {
+      res.status(404).json({ message: "User not found" });
+      return;
+    }
+    if (typeof enabled === "boolean") {
+      devmodeTogglesTotal.inc({ scope: "user", value: enabled ? "on" : "off" });
+    }
+    logger.info({ userId: String(myId), enabled, defaultForNewWorkspaces }, "devmode preference updated");
+    // return the same shape as /auth/check (user + flag snapshot) so the client can
+    // swap authUser wholesale without losing its flags
+    res.status(200).json({ ...user.toObject(), flags: req.flags });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const checkAuth: RequestHandler = (req, res, next) => {
   try {
-    res.status(200).json(req.user);
+    // Merge the per-request feature-flag snapshot (set by withFlags) onto the user.
+    // req.user is a hydrated Mongoose doc at runtime; cast to reach toObject() since
+    // the Express augmentation types it as the plain IUser (same idiom used elsewhere).
+    const user = (req.user as unknown as { toObject: () => Record<string, unknown> }).toObject();
+    res.status(200).json({ ...user, flags: req.flags });
   } catch (error) {
     next(error);
   }

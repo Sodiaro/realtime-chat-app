@@ -55,6 +55,14 @@ export const openapiSpec = {
             },
           },
           ghostMode: { type: "boolean", description: "hides read/edit/delete/last-seen/status-view activity (publicly flagged)" },
+          devMode: {
+            type: "object",
+            description: "personal Dev Mode preference (Phase 1); only returned to the owner",
+            properties: {
+              enabled: { type: "boolean" },
+              defaultForNewWorkspaces: { type: "boolean" },
+            },
+          },
           createdAt: { type: "string", format: "date-time" },
         },
       },
@@ -120,6 +128,16 @@ export const openapiSpec = {
               on: { type: "boolean" },
             },
           },
+          code: {
+            type: "object",
+            nullable: true,
+            description: "shared code snippet (Phase 3)",
+            properties: {
+              language: { type: "string", description: "allowlisted language; plaintext fallback" },
+              content: { type: "string", description: "snippet (max 20KB)" },
+              filename: { type: "string", nullable: true },
+            },
+          },
           mentions: { type: "array", items: ID },
           replyTo: { oneOf: [ID, ref("Message")], nullable: true },
           forwardedFrom: { ...ID, nullable: true },
@@ -163,6 +181,16 @@ export const openapiSpec = {
           isPinned: { type: "boolean" },
           isAdmin: { type: "boolean" },
           disappearMinutes: { type: "integer", description: "0 = off" },
+          devMode: {
+            type: "object",
+            nullable: true,
+            description: "per-workspace Dev Mode override; absent ⇒ inherit",
+            properties: {
+              enabled: { type: "boolean" },
+              enabledBy: { ...ID, description: "user who last toggled it" },
+              enabledAt: { type: "string", format: "date-time" },
+            },
+          },
         },
       },
       ScheduledMessage: {
@@ -323,9 +351,26 @@ export const openapiSpec = {
     "/api/auth/check": {
       get: {
         tags: ["Auth"],
-        summary: "Current authenticated user",
+        summary: "Current authenticated user (+ feature-flag snapshot)",
         security: auth,
-        responses: { 200: ok("Current user", ref("User")), 401: ok("Not authenticated") },
+        responses: {
+          200: ok("Current user, plus a per-request feature-flag snapshot in `flags`", {
+            allOf: [
+              ref("User"),
+              {
+                type: "object",
+                properties: {
+                  flags: {
+                    type: "object",
+                    description: "resolved feature flags for this user",
+                    properties: { dev_mode: { type: "boolean" } },
+                  },
+                },
+              },
+            ],
+          }),
+          401: ok("Not authenticated"),
+        },
       },
     },
     "/api/auth/check-username": {
@@ -384,6 +429,28 @@ export const openapiSpec = {
           }),
         },
         responses: { 200: ok("Updated user", ref("User")), 400: ok("Invalid / nothing to update", ref("Error")) },
+      },
+    },
+    "/api/auth/devmode": {
+      post: {
+        tags: ["Account"],
+        summary: "Update personal Dev Mode preference (requires the dev_mode feature flag)",
+        security: auth,
+        requestBody: {
+          required: true,
+          content: json({
+            type: "object",
+            properties: {
+              enabled: { type: "boolean" },
+              defaultForNewWorkspaces: { type: "boolean" },
+            },
+          }),
+        },
+        responses: {
+          200: ok("Updated user + flag snapshot (same shape as /auth/check)", ref("User")),
+          400: ok("Invalid / nothing to update", ref("Error")),
+          403: ok("Dev Mode not available for this account", ref("Error")),
+        },
       },
     },
     "/api/auth/change-password": {
@@ -527,6 +594,7 @@ export const openapiSpec = {
               poll: { type: "object", properties: { question: { type: "string" }, options: { type: "array", items: { type: "string" } }, multiple: { type: "boolean" } } },
               location: { type: "object", properties: { lat: { type: "number" }, lng: { type: "number" }, label: { type: "string" } } },
               contact: { type: "object", properties: { userId: { type: "string" }, name: { type: "string" }, username: { type: "string" }, avatar: { type: "string" } } },
+              code: { type: "object", properties: { language: { type: "string" }, content: { type: "string" }, filename: { type: "string" } }, description: "code snippet (Phase 3; max 20KB)" },
               replyTo: { type: "string", description: "message id being replied to" },
               viewOnce: { type: "boolean", description: "content can be opened only once" },
             },
@@ -651,6 +719,24 @@ export const openapiSpec = {
         responses: { 201: ok("Created group", ref("Conversation")), 409: ok("Duplicate group name") },
       },
     },
+    "/api/messages/conversation/{conversationId}/devmode": {
+      patch: {
+        tags: ["Conversations"],
+        summary: "Toggle Dev Mode for a group workspace (admins only; requires dev_mode flag)",
+        security: auth,
+        parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: json({ type: "object", required: ["enabled"], properties: { enabled: { type: "boolean" } } }),
+        },
+        responses: {
+          200: ok("Updated conversation (with devMode audit fields)", ref("Conversation")),
+          400: ok("enabled must be a boolean", ref("Error")),
+          403: ok("Admins only / Dev Mode not available", ref("Error")),
+          404: ok("Group not found", ref("Error")),
+        },
+      },
+    },
     "/api/messages/conversation/{conversationId}/shared": {
       get: {
         tags: ["Conversations"],
@@ -688,6 +774,7 @@ export const openapiSpec = {
               text: { type: "string" },
               image: { type: "string" },
               audio: { type: "string" },
+              code: { type: "object", properties: { language: { type: "string" }, content: { type: "string" }, filename: { type: "string" } }, description: "code snippet (Phase 3; max 20KB)" },
               replyTo: { type: "string" },
               viewOnce: { type: "boolean" },
             },
@@ -1143,6 +1230,24 @@ export const openapiSpec = {
           { name: "groupId", in: "path", required: true, schema: { type: "string" } },
         ],
         responses: { 200: ok("Joined group", ref("Conversation")), 403: ok("Join the community first") },
+      },
+    },
+    "/api/communities/{id}/devmode": {
+      patch: {
+        tags: ["Communities"],
+        summary: "Toggle Dev Mode for a community workspace (admins only; requires dev_mode flag)",
+        security: auth,
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: json({ type: "object", required: ["enabled"], properties: { enabled: { type: "boolean" } } }),
+        },
+        responses: {
+          200: ok("Updated community (with devMode audit fields)"),
+          400: ok("enabled must be a boolean", ref("Error")),
+          403: ok("Admins only / Dev Mode not available", ref("Error")),
+          404: ok("Community not found", ref("Error")),
+        },
       },
     },
     "/api/communities/{id}/role": {

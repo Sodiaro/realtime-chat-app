@@ -3,6 +3,17 @@ import { z } from "zod";
 
 config();
 
+// Parse a boolean from an env string. NOTE: z.coerce.boolean() is unusable for env
+// vars — it uses JS Boolean() semantics, so "false"/"0" (any non-empty string)
+// become true. This accepts only explicit truthy tokens; anything else (including
+// unset) resolves to the provided default.
+const TRUTHY = new Set(["1", "true", "yes", "on"]);
+const envBool = (def: boolean) =>
+  z.preprocess(
+    (v) => (typeof v === "string" ? TRUTHY.has(v.trim().toLowerCase()) : def),
+    z.boolean()
+  );
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   PORT: z.coerce.number().default(5001),
@@ -23,6 +34,15 @@ const envSchema = z.object({
   VAPID_PUBLIC_KEY: z.string().optional(),
   VAPID_PRIVATE_KEY: z.string().optional(),
   VAPID_SUBJECT: z.string().default("mailto:admin@devchat.local"),
+
+  // ── Feature flags (Dev Mode rollout) ──────────────────────────────────────
+  // Master kill-switch. When false, Dev Mode is off for everyone regardless of
+  // the allowlist/rollout below.
+  FEATURE_DEV_MODE: envBool(false),
+  // CSV of userIds with always-on early access (bypasses the rollout percentage).
+  DEV_MODE_ALLOWLIST: z.string().optional(),
+  // Deterministic gradual rollout: 0–100 (% of users the flag is enabled for).
+  DEV_MODE_ROLLOUT_PCT: z.coerce.number().min(0).max(100).default(0),
 });
 
 const rawEnv = {

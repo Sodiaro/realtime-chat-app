@@ -279,6 +279,18 @@ export const useChatStore = create((set, get) => ({
     socket.off("conversationUpdated");
     socket.off("messagesDelivered");
     socket.off("groupMessagesRead");
+    socket.off("workspace:devmode");
+
+    // a workspace's Dev Mode override changed (an admin toggled it) — patch it live so
+    // every member re-resolves their mode without a refresh
+    socket.on("workspace:devmode", ({ scope, id, devMode }) => {
+      if (scope !== "conversation") return; // community workspaces belong to their own UI
+      set((state) => ({
+        conversations: state.conversations.map((c) => (c._id === id ? { ...c, devMode } : c)),
+        selectedUser:
+          state.selectedUser?._id === id ? { ...state.selectedUser, devMode } : state.selectedUser,
+      }));
+    });
 
     // a group member read messages → add them to readBy of the open group's messages
     socket.on("groupMessagesRead", ({ conversationId, userId }) => {
@@ -376,6 +388,7 @@ export const useChatStore = create((set, get) => ({
     socket.off("conversationUpdated");
     socket.off("messagesDelivered");
     socket.off("groupMessagesRead");
+    socket.off("workspace:devmode");
   },
 
   // increment a conversation's unread count + bump its activity time
@@ -637,6 +650,30 @@ export const useChatStore = create((set, get) => ({
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to update group");
       return false;
+    }
+  },
+
+  // toggle Dev Mode for a group workspace (admins only; server re-checks the flag).
+  // Patches locally; the server also broadcasts workspace:devmode to every member.
+  setWorkspaceDevMode: async (conversationId, enabled) => {
+    try {
+      const res = await axiosInstance.patch(
+        `/messages/conversation/${conversationId}/devmode`,
+        { enabled }
+      );
+      const devMode = res.data.devMode;
+      set((state) => ({
+        conversations: state.conversations.map((c) =>
+          c._id === conversationId ? { ...c, devMode } : c
+        ),
+        selectedUser:
+          state.selectedUser?._id === conversationId
+            ? { ...state.selectedUser, devMode }
+            : state.selectedUser,
+      }));
+      toast.success(enabled ? "Dev Mode on for this workspace" : "Dev Mode off for this workspace");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update workspace Dev Mode");
     }
   },
 

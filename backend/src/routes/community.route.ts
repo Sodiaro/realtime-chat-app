@@ -1,5 +1,6 @@
 import express from "express";
 import { protectRoute } from "../middleware/auth.middleware.js";
+import { withFlags } from "../middleware/flags.middleware.js";
 import { createLimiter } from "../middleware/rateLimit.js";
 import {
   createCommunity,
@@ -18,6 +19,7 @@ import {
   joinCommunityByInvite,
   discoverCommunities,
   removeCommunityMember,
+  setCommunityDevMode,
 } from "../controllers/community.controller.js";
 
 const router = express.Router();
@@ -32,6 +34,7 @@ router.post("/invite/:code/join", protectRoute, joinCommunityByInvite);
 
 router.get("/:id", protectRoute, getCommunity);
 router.patch("/:id", protectRoute, updateCommunity);
+router.patch("/:id/devmode", protectRoute, withFlags, setCommunityDevMode);
 router.post("/:id/groups", protectRoute, createCommunityGroup);
 router.patch("/:id/groups/:groupId", protectRoute, updateCommunityGroup);
 router.post("/:id/role", protectRoute, setCommunityRole);

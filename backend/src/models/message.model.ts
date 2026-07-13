@@ -56,6 +56,14 @@ export interface ISystemEvent {
   on: boolean;
 }
 
+// a shared code snippet (Phase 3). Message kind stays duck-typed by field presence —
+// see docs/dev-mode/phase-3-code-messaging.md for why there's no messageType enum.
+export interface ICode {
+  language: string; // from an allowlist; "plaintext" fallback
+  content: string; // size-capped server-side
+  filename?: string; // optional, for download + language hint
+}
+
 export interface IMessage {
   _id: Types.ObjectId;
   conversationId: Types.ObjectId;
@@ -71,6 +79,7 @@ export interface IMessage {
   contact?: IContactCard;
   call?: ICallEvent;
   system?: ISystemEvent;
+  code?: ICode;
   mentions: Types.ObjectId[];
   deliveredAt?: Date;
   readAt?: Date;
@@ -123,6 +132,10 @@ const systemSchema = new Schema<ISystemEvent>(
   { type: String, on: Boolean },
   { _id: false }
 );
+const codeSchema = new Schema<ICode>(
+  { language: String, content: String, filename: String },
+  { _id: false }
+);
 
 const messageSchema = new Schema<IMessage>(
   {
@@ -157,6 +170,7 @@ const messageSchema = new Schema<IMessage>(
     contact: contactSchema,
     call: callSchema,
     system: systemSchema,
+    code: codeSchema,
     mentions: {
       type: [{ type: Schema.Types.ObjectId, ref: "User" }],
       default: [],

@@ -13,12 +13,14 @@ import {
   verifyEmail,
   resendOtp,
   updatePrivacy,
+  updateDevMode,
   getSessions,
   revokeSession,
   forgotPassword,
   resetPassword,
 } from "../controllers/auth.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
+import { withFlags } from "../middleware/flags.middleware.js";
 import { authLimiter } from "../middleware/rateLimit.js";
 
 const router = express.Router();
@@ -33,7 +35,8 @@ router.post("/reset-password", authLimiter, resetPassword);
 router.post("/logout", logout);
 router.put("/update-profile", protectRoute, updateProfile);
 router.post("/privacy", protectRoute, updatePrivacy);
-router.get("/check", protectRoute, checkAuth);
+router.post("/devmode", protectRoute, withFlags, updateDevMode); // flag-gated
+router.get("/check", protectRoute, withFlags, checkAuth); // withFlags → req.flags
 router.post("/block/:id", protectRoute, blockUser);
 router.post("/change-password", protectRoute, changePassword);
 router.post("/logout-all", protectRoute, logoutAllDevices);

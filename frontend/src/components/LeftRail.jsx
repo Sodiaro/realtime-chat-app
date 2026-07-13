@@ -4,9 +4,10 @@ import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 import { useThemeStore } from "../store/useThemeStore";
 import { usePanelStore } from "../store/usePanelStore";
+import { useDevModeStore } from "../store/useDevModeStore";
 import Avatar from "./Avatar";
 import ConfirmModal from "./ui/ConfirmModal";
-import { MessageSquare, UserRound, Phone, Clock, Star, Sun, Moon, LogOut, Settings, User, Users, Shield } from "lucide-react";
+import { MessageSquare, UserRound, Phone, Clock, Star, Sun, Moon, LogOut, Settings, User, Users, Shield, Code2 } from "lucide-react";
 
 const RailLink = ({ to, icon, label, badge = 0 }) => {
   const { pathname } = useLocation();
@@ -46,10 +47,12 @@ const RailButton = ({ onClick, icon, label, active }) => (
 
 // WhatsApp-style vertical icon rail (desktop only — mobile uses the top navbar)
 const LeftRail = () => {
-  const { authUser, logout } = useAuthStore();
+  const { authUser, logout, setDevMode } = useAuthStore();
   const { conversations } = useChatStore();
   const { resolved, toggle } = useThemeStore();
   const { panel, openPanel } = usePanelStore();
+  const devAvailable = useDevModeStore((s) => Boolean(s.flags?.dev_mode));
+  const devOn = Boolean(authUser?.devMode?.enabled);
   const isDark = resolved === "devdark";
   const [confirmLogout, setConfirmLogout] = useState(false);
 
@@ -107,6 +110,21 @@ const LeftRail = () => {
       <RailLink to="/communities" icon={<Users className="size-5" />} label="Communities" />
 
       <div className="mt-auto flex flex-col items-center gap-2">
+        {devAvailable && (
+          <button
+            onClick={() => setDevMode({ enabled: !devOn })}
+            title={devOn ? "Dev Mode is on — switch to Chat Mode" : "Switch to Dev Mode"}
+            aria-label="Toggle Dev Mode"
+            aria-pressed={devOn}
+            className={`size-11 rounded-xl grid place-items-center transition-colors ${
+              devOn
+                ? "bg-primary text-primary-content"
+                : "text-base-content/60 hover:bg-base-200 hover:text-base-content"
+            }`}
+          >
+            <Code2 className="size-5" />
+          </button>
+        )}
         <RailLink to="/settings" icon={<Settings className="size-5" />} label="Settings" />
         <button
           onClick={toggle}

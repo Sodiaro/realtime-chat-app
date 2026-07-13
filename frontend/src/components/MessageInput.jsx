@@ -1,13 +1,15 @@
 import { useRef, useState, useEffect } from "react";
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
+import { useDevModeStore } from "../store/useDevModeStore";
 import { useDraftStore } from "../store/useDraftStore";
 import { usePrefsStore } from "../store/usePrefsStore";
-import { Image, Send, X, Reply, Mic, Pause, Play, Trash2, Paperclip, BarChart3, FileText, Clock, Plus, MapPin, UserRound, Eye } from "lucide-react";
+import { Image, Send, X, Reply, Mic, Pause, Play, Trash2, Paperclip, BarChart3, FileText, Clock, Plus, MapPin, UserRound, Eye, Code2 } from "lucide-react";
 import toast from "react-hot-toast";
 import PollModal from "./PollModal";
 import ScheduleModal from "./ScheduleModal";
 import ContactPickerModal from "./ContactPickerModal";
+import CodeModal from "./code/CodeModal";
 
 const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
@@ -18,6 +20,7 @@ const MessageInput = () => {
   const [showPoll, setShowPoll] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
   const [showContact, setShowContact] = useState(false);
+  const [showCode, setShowCode] = useState(false);
   const [recording, setRecording] = useState(false);
   const [paused, setPaused] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -34,6 +37,7 @@ const MessageInput = () => {
   const { sendMessage, emitTyping, emitRecording, selectedUser, replyingTo, setReplyingTo } =
     useChatStore();
   const { authUser } = useAuthStore();
+  const devAvailable = useDevModeStore((s) => Boolean(s.flags?.dev_mode));
   const { getDraft, setDraft, clearDraft } = useDraftStore();
   const { enterToSend } = usePrefsStore();
   const chatId = selectedUser?._id;
@@ -288,7 +292,7 @@ const MessageInput = () => {
           <Reply className="size-4 shrink-0 opacity-60" />
           <div className="flex-1 min-w-0">
             <p className="text-xs opacity-60">Replying to</p>
-            <p className="text-sm truncate">{replyingTo.text || "📷 Photo"}</p>
+            <p className="text-sm truncate">{replyingTo.text || (replyingTo.code ? "💻 Code" : "📷 Photo")}</p>
           </div>
           <button type="button" onClick={() => setReplyingTo(null)}>
             <X className="size-4" />
@@ -421,6 +425,13 @@ const MessageInput = () => {
                     <UserRound className="size-4" /> Contact
                   </button>
                 </li>
+                {devAvailable && (
+                  <li>
+                    <button type="button" onClick={() => setShowCode(true)}>
+                      <Code2 className="size-4" /> Code
+                    </button>
+                  </li>
+                )}
               </ul>
             </div>
 
@@ -474,6 +485,7 @@ const MessageInput = () => {
       {showContact && (
         <ContactPickerModal onClose={() => setShowContact(false)} onPick={shareContact} />
       )}
+      {showCode && <CodeModal onClose={() => setShowCode(false)} />}
     </div>
   );
 };

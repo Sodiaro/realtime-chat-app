@@ -8,6 +8,7 @@ import { formatMessageTime } from "../lib/utils";
 import Avatar from "./Avatar";
 import Lightbox from "./Lightbox";
 import VoiceNote from "./VoiceNote";
+import CodeBlock from "./code/CodeBlock";
 
 const EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
@@ -325,7 +326,7 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users, grouped 
               <div className="mb-1 border-l-2 border-base-content/30 pl-2 text-xs opacity-70">
                 {message.replyTo.deletedAt
                   ? "deleted message"
-                  : message.replyTo.text || "📷 Photo"}
+                  : message.replyTo.text || (message.replyTo.code ? "💻 Code" : "📷 Photo")}
               </div>
             )}
             {message.image && (
@@ -440,6 +441,7 @@ const MessageBubble = ({ message, isOwn, authUser, selectedUser, users, grouped 
                 )}
               </div>
             )}
+            {message.code && <CodeBlock code={message.code} />}
             {message.text && <p>{renderText(message.text)}</p>}
             {message.linkPreview && (
               <a
