@@ -135,6 +135,9 @@ const notExpired = () => ({
   $or: [{ expiresAt: { $exists: false } }, { expiresAt: { $gt: new Date() } }],
 });
 
+// thread replies are read through the thread view, never the main timeline
+const topLevelOnly = () => ({ threadRoot: { $exists: false } });
+
 const computeExpiry = (minutes?: number) =>
   minutes && minutes > 0 ? new Date(Date.now() + minutes * 60_000) : undefined;
 
@@ -292,7 +295,11 @@ export const getMessages: RequestHandler = async (req, res, next) => {
 
     // pass ?cursor=<createdAt> to page back through older messages
     const limit = Math.min(Number(req.query.limit) || 30, 100);
-    const query: Record<string, unknown> = { conversationId: conversation._id, ...notExpired() };
+    const query: Record<string, unknown> = {
+      conversationId: conversation._id,
+      ...notExpired(),
+      ...topLevelOnly(),
+    };
     if (req.query.cursor) {
       query.createdAt = { $lt: new Date(String(req.query.cursor)) };
     }
@@ -1005,7 +1012,7 @@ export const getConversationMessages: RequestHandler = async (req, res, next) =>
     }
 
     const limit = Math.min(Number(req.query.limit) || 30, 100);
-    const query: Record<string, unknown> = { conversationId, ...notExpired() };
+    const query: Record<string, unknown> = { conversationId, ...notExpired(), ...topLevelOnly() };
     if (req.query.cursor) query.createdAt = { $lt: new Date(String(req.query.cursor)) };
 
     const iAmGhost = Boolean(req.user!.ghostMode);
