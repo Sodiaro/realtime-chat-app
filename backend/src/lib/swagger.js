@@ -1,4 +1,3 @@
-// Hand-maintained OpenAPI spec. Keep in sync when routes change.
 const ID = { type: "string", example: "665f1c2a9b1e4a0012abcd34" };
 const json = (schema) => ({ "application/json": { schema } });
 const ref = (name) => ({ $ref: `#/components/schemas/${name}` });
@@ -140,6 +139,10 @@ export const openapiSpec = {
           },
           mentions: { type: "array", items: ID },
           replyTo: { oneOf: [ID, ref("Message")], nullable: true },
+          threadRoot: { ...ID, nullable: true, description: "set on a thread reply; excluded from the main timeline" },
+          threadCount: { type: "integer", nullable: true, description: "replies under this root" },
+          threadLastReplyAt: { type: "string", format: "date-time", nullable: true },
+          threadParticipants: { type: "array", items: ID, nullable: true },
           forwardedFrom: { ...ID, nullable: true },
           reactions: arrayOf("Reaction"),
           starredBy: { type: "array", items: ID },

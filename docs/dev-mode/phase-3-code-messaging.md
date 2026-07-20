@@ -1,6 +1,6 @@
 # Phase 3 — Advanced Code Messaging (DESIGN)
 
-**Status:** Proposed (awaiting approval — no code yet)
+**Status:** Implemented
 **Depends on:** Phase 1 (Dev Mode flag) · Phase 2 (Dev Workspace / Discussions)
 **Goal:** Make **code a first-class message type** — syntax-highlighted, copyable,
 downloadable, with Explain/Refactor/Review entry points — reusing the existing message

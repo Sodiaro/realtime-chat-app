@@ -1,6 +1,6 @@
 # Phase 2 — Dev Workspace Experience (DESIGN)
 
-**Status:** Proposed (awaiting approval — no code yet)
+**Status:** Implemented
 **Depends on:** Phase 1 (Dev Mode flag + `resolveMode` + per-workspace `devMode`)
 **Goal:** When a **group/community workspace** is in Dev Mode, present a developer
 workspace (secondary nav + sections: Discussions, Repositories, Documentation, Issues,

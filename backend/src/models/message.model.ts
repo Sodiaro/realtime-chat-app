@@ -47,7 +47,7 @@ export interface ICallEvent {
   type: "audio" | "video";
   status: "answered" | "missed" | "rejected";
   durationSec?: number;
-  group?: boolean; // a group/multi-person call (rendered differently)
+  group?: boolean;
 }
 
 // in-timeline system notice (e.g. disappearing messages turned on/off)
@@ -56,12 +56,11 @@ export interface ISystemEvent {
   on: boolean;
 }
 
-// a shared code snippet (Phase 3). Message kind stays duck-typed by field presence —
-// see docs/dev-mode/phase-3-code-messaging.md for why there's no messageType enum.
+
 export interface ICode {
-  language: string; // from an allowlist; "plaintext" fallback
-  content: string; // size-capped server-side
-  filename?: string; // optional, for download + language hint
+  language: string;
+  content: string;
+  filename?: string;
 }
 
 export interface IMessage {
@@ -83,19 +82,23 @@ export interface IMessage {
   mentions: Types.ObjectId[];
   deliveredAt?: Date;
   readAt?: Date;
-  readBy: Types.ObjectId[]; // group read receipts: who has read this message
+  readBy: Types.ObjectId[];
   editedAt?: Date;
   deletedAt?: Date;
-  original?: { text?: string; image?: string }; // kept on delete so ghost-mode viewers can recover it
+  original?: { text?: string; image?: string };
   pinnedAt?: Date;
   replyTo?: Types.ObjectId;
+  threadRoot?: Types.ObjectId;
+  threadCount?: number;
+  threadLastReplyAt?: Date;
+  threadParticipants?: Types.ObjectId[];
   forwardedFrom?: Types.ObjectId;
   reactions: IReaction[];
   starredBy: Types.ObjectId[];
-  expiresAt?: Date; // disappearing messages
-  viewOnce?: boolean; // content can be opened only once per recipient
-  viewedBy: Types.ObjectId[]; // recipients who have consumed a view-once message
-  ghostDeleted?: boolean; // deleted by a ghost-mode user → hide silently (no tombstone)
+  expiresAt?: Date;
+  viewOnce?: boolean;
+  viewedBy: Types.ObjectId[];
+  ghostDeleted?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -202,6 +205,20 @@ const messageSchema = new Schema<IMessage>(
       type: Schema.Types.ObjectId,
       ref: "Message",
     },
+    threadRoot: {
+      type: Schema.Types.ObjectId,
+      ref: "Message",
+    },
+    threadCount: {
+      type: Number,
+    },
+    threadLastReplyAt: {
+      type: Date,
+    },
+    threadParticipants: {
+      type: [{ type: Schema.Types.ObjectId, ref: "User" }],
+      default: undefined,
+    },
     forwardedFrom: {
       type: Schema.Types.ObjectId,
       ref: "User",
@@ -226,7 +243,7 @@ const messageSchema = new Schema<IMessage>(
 );
 
 messageSchema.index({ conversationId: 1, createdAt: -1 });
-// TTL: Mongo auto-deletes expired (disappearing) messages
+messageSchema.index({ threadRoot: 1, createdAt: 1 });
 messageSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 const Message = mongoose.model<IMessage>("Message", messageSchema);
