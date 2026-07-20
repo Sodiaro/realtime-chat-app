@@ -23,7 +23,7 @@ production-ready before the next begins.
 | 1 | Foundation & Mode System | ✅ Implemented | [design](./phase-1-foundation.md) · [rollout runbook](./phase-1-rollout.md) |
 | 2 | Developer Workspace Layout | ✅ Implemented | [phase-2-workspace.md](./phase-2-workspace.md) |
 | 3 | Advanced Code Messaging | ✅ Implemented | [phase-3-code-messaging.md](./phase-3-code-messaging.md) |
-| 4 | Threaded Engineering Discussions | ⏳ Not started | — |
+| 4 | Threaded Engineering Discussions | 📐 Designed | [phase-4-threaded-discussions.md](./phase-4-threaded-discussions.md) |
 | 5 | Documentation Hub | ⏳ Not started | — |
 | 6 | GitHub Integration | ⏳ Not started | — |
 | 7 | AI Developer Assistant | ⏳ Not started | — |

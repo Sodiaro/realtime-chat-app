@@ -1,6 +1,6 @@
 # Phase 1 — Foundation & Mode System
 
-**Status:** Designed (awaiting approval to implement)
+**Status:** Implemented
 **Owner:** Platform
 **Feature flag:** `dev_mode`
 **Goal:** Introduce **Dev Mode** as an additive, flag-gated layer over the existing
